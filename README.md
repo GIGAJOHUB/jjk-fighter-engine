@@ -79,6 +79,8 @@ If you plan to wire in the networking layer during your local build, make sure E
 The repository includes a ready-to-run Windows build:
 
 - `jjk_game.exe`
+- `assets/menu_theme.mp3`
+- `assets/menu_frames/`
 
 This lets players launch the current packaged version directly without setting up MSYS2, GCC, or Raylib first.
 
@@ -106,7 +108,14 @@ This lets players launch the current packaged version directly without setting u
 ### Match Flow
 
 - `Enter` restarts from the game-over screen.
+- `Esc` opens the in-match pause menu and also returns from sub-menus.
 - Toji uses the same dodge input as other fighters, but because of Heavenly Restriction this functions as his signature directional mobility tool instead of a cursed-technique action.
+
+### Front-End Menu
+
+- `W` / `S` or `Up Arrow` / `Down Arrow` move through the main menu and pause menu.
+- `Enter` or `Space` confirms a menu selection.
+- The title screen loops the bundled 8-bit opening theme and animated menu background.
 
 ## Repository Contents
 

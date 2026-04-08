@@ -27,12 +27,16 @@
 #define DODGE_SPEED              9.0f
 #define DODGE_COOLDOWN_FRAMES   40
 #define YUJI_COMBO_WINDOW        2.2f
+#define MAX_MENU_FRAMES        128
 
 typedef enum {
-    STATE_CHAR_SELECT = 0,
+    STATE_MAIN_MENU = 0,
+    STATE_ABOUT,
+    STATE_CHAR_SELECT,
     STATE_BATTLE,
     STATE_DOMAIN,
     STATE_DOMAIN_CLASH,
+    STATE_PAUSE,
     STATE_GAME_OVER
 } GameState;
 
@@ -49,6 +53,21 @@ typedef struct {
     int winnerPlayer;
     float damage;
 } DomainClashState;
+
+typedef struct {
+    Texture2D frames[MAX_MENU_FRAMES];
+    int count;
+    int currentFrame;
+    float timer;
+    float frameDuration;
+} MenuVideo;
+
+typedef struct {
+    int cursor;
+    int pauseCursor;
+    bool launchBattleAfterSelect;
+    GameState pausedFromState;
+} FrontendState;
 
 static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     Fighter f;
@@ -716,15 +735,136 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     }
 }
 
+static bool HasConfirmedRoster(const SelectState* p1sel, const SelectState* p2sel) {
+    return p1sel->confirmed && p2sel->confirmed;
+}
+
+static void ResetBattleState(Fighter* p1, Fighter* p2, const SelectState* p1sel, const SelectState* p2sel,
+                             int* domainCasterPlayer, float* domainTimer, DomainClashState* clash) {
+    *p1 = InitFighter(p1sel->selected, 160.0f, 1);
+    *p2 = InitFighter(p2sel->selected, 740.0f, -1);
+    *domainCasterPlayer = 0;
+    *domainTimer = 0.0f;
+    clash->active = false;
+    clash->timer = 0.0f;
+    gDomainAnnounce.active = false;
+    for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
+}
+
+static void UpdateMenuVideo(MenuVideo* video) {
+    if (video->count <= 0) return;
+    video->timer += GetFrameTime();
+    if (video->timer >= video->frameDuration) {
+        video->timer = 0.0f;
+        video->currentFrame = (video->currentFrame + 1) % video->count;
+    }
+}
+
+static void DrawMenuBackground(const MenuVideo* video) {
+    if (video->count > 0 && IsTextureValid(video->frames[video->currentFrame])) {
+        DrawTexture(video->frames[video->currentFrame], 0, 0, WHITE);
+    } else {
+        DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, (Color){8, 6, 20, 255}, (Color){24, 10, 36, 255});
+    }
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 105});
+    for (int y = 0; y < SCREEN_H; y += 4) {
+        DrawRectangle(0, y, SCREEN_W, 1, (Color){255, 255, 255, 9});
+    }
+}
+
+static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
+    DrawRectangleRec(panel, fill);
+    DrawRectangleLinesEx(panel, 3.0f, border);
+    DrawRectangleLinesEx((Rectangle){ panel.x + 6, panel.y + 6, panel.width - 12, panel.height - 12 }, 1.0f, ColorAlpha(WHITE, 0.18f));
+}
+
+static void DrawMainMenu(const MenuVideo* video, int cursor) {
+    static const char* items[] = { "PLAY", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
+    int count = 4;
+    DrawMenuBackground(video);
+
+    DrawText("JUJUTSU KAISEN", 270, 44, 34, (Color){235, 240, 255, 255});
+    DrawText("CURSED CLASH 16-BIT EDITION", 220, 82, 24, (Color){255, 215, 120, 255});
+
+    DrawPixelPanel((Rectangle){ 282, 148, 396, 248 }, (Color){18, 14, 30, 215}, (Color){130, 185, 255, 255});
+    DrawText("A custom fight-night build by GIGAJOHUB + Codex", 304, 168, 16, (Color){200, 220, 255, 235});
+    DrawText("Looped 8-bit opening theme and animated menu background loaded.", 304, 192, 14, (Color){255, 225, 150, 220});
+
+    for (int i = 0; i < count; i++) {
+        Rectangle row = { 316, 228 + i * 40.0f, 328, 30 };
+        bool selected = (i == cursor);
+        DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
+        DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
+        DrawText(items[i], 340, (int)row.y + 6, 18, selected ? WHITE : (Color){210, 210, 230, 240});
+    }
+
+    DrawText("UP / DOWN or W / S to move  |  ENTER / SPACE to select", 212, 430, 16, (Color){220, 220, 235, 240});
+}
+
+static void DrawAboutScreen(const MenuVideo* video) {
+    DrawMenuBackground(video);
+    DrawPixelPanel((Rectangle){ 140, 82, 680, 360 }, (Color){18, 14, 30, 225}, (Color){255, 215, 120, 255});
+    DrawText("INTRODUCE US", 352, 104, 28, WHITE);
+    DrawText("JJK Fighter Engine is a custom 2D C + Raylib arena brawler.", 172, 160, 20, (Color){220, 230, 255, 240});
+    DrawText("This version adds a 16-bit front-end, pause flow, looped music,", 172, 196, 20, (Color){220, 230, 255, 240});
+    DrawText("animated menu background, domain clashes, and signature ultimates.", 172, 232, 20, (Color){220, 230, 255, 240});
+    DrawText("Controls: X / NUM4 = Ultimate, ESC = Pause / Back to menu layer.", 172, 286, 18, (Color){255, 222, 140, 240});
+    DrawText("Press ENTER or ESC to return.", 280, 362, 20, (Color){255, 255, 255, 240});
+}
+
+static void DrawPauseMenu(const MenuVideo* video, int cursor) {
+    static const char* items[] = { "RESUME", "CHARACTER SELECT", "MAIN MENU", "EXIT GAME" };
+    DrawMenuBackground(video);
+    DrawPixelPanel((Rectangle){ 300, 140, 360, 230 }, (Color){16, 12, 26, 230}, (Color){255, 205, 120, 255});
+    DrawText("PAUSED", 416, 166, 30, WHITE);
+    for (int i = 0; i < 4; i++) {
+        Rectangle row = { 334, 214 + i * 34.0f, 290, 26 };
+        bool selected = (i == cursor);
+        DrawRectangleRec(row, selected ? (Color){90, 80, 150, 220} : (Color){32, 28, 48, 215});
+        DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
+        DrawText(items[i], 360, (int)row.y + 4, 18, selected ? WHITE : (Color){215, 215, 230, 240});
+    }
+    DrawText("ESC resumes instantly.", 370, 336, 16, (Color){220, 220, 235, 235});
+}
+
 int main(void) {
     InitWindow(SCREEN_W, SCREEN_H, "JUJUTSU KAISEN - Cursed Clash");
     SetTargetFPS(60);
+    InitAudioDevice();
 
     for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
 
-    GameState state = STATE_CHAR_SELECT;
+    Music bgm = {0};
+    bool musicLoaded = false;
+    MenuVideo menuVideo = {0};
+    FrontendState frontend = {0};
+    frontend.cursor = 0;
+    frontend.pauseCursor = 0;
+    frontend.launchBattleAfterSelect = false;
+    frontend.pausedFromState = STATE_BATTLE;
+
+    FilePathList menuPaths = LoadDirectoryFilesEx("assets/menu_frames", ".png", false);
+    if (menuPaths.count > 0) {
+        menuVideo.count = (menuPaths.count < MAX_MENU_FRAMES) ? menuPaths.count : MAX_MENU_FRAMES;
+        menuVideo.frameDuration = 1.0f / 12.0f;
+        for (int i = 0; i < menuVideo.count; i++) {
+            menuVideo.frames[i] = LoadTexture(menuPaths.paths[i]);
+        }
+    }
+    UnloadDirectoryFiles(menuPaths);
+
+    if (FileExists("assets/menu_theme.mp3")) {
+        bgm = LoadMusicStream("assets/menu_theme.mp3");
+        SetMusicVolume(bgm, 0.55f);
+        PlayMusicStream(bgm);
+        musicLoaded = true;
+    }
+
+    GameState state = STATE_MAIN_MENU;
     SelectState p1sel = { 0, CHAR_SUKUNA, false };
     SelectState p2sel = { 4, CHAR_YUJI, false };
+    p1sel.selected = CHAR_SUKUNA;
+    p2sel.selected = CHAR_YUJI;
     Fighter p1;
     Fighter p2;
     memset(&p1, 0, sizeof(Fighter));
@@ -735,12 +875,66 @@ int main(void) {
     DomainClashState clash = {0};
 
     while (!WindowShouldClose()) {
+        if (musicLoaded) {
+            UpdateMusicStream(bgm);
+            if (!IsMusicStreamPlaying(bgm) || GetMusicTimePlayed(bgm) >= GetMusicTimeLength(bgm) - 0.05f) {
+                StopMusicStream(bgm);
+                PlayMusicStream(bgm);
+            }
+        }
+
+        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_PAUSE) {
+            UpdateMenuVideo(&menuVideo);
+        }
+
         ShakeUpdate();
         ParticleUpdate();
         AnnounceUpdate();
 
         switch (state) {
+            case STATE_MAIN_MENU: {
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 4;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 3) % 4;
+
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                    switch (frontend.cursor) {
+                        case 0:
+                            if (HasConfirmedRoster(&p1sel, &p2sel)) {
+                                ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                                state = STATE_BATTLE;
+                            } else {
+                                frontend.launchBattleAfterSelect = true;
+                                state = STATE_CHAR_SELECT;
+                            }
+                            break;
+                        case 1:
+                            frontend.launchBattleAfterSelect = false;
+                            state = STATE_CHAR_SELECT;
+                            break;
+                        case 2:
+                            state = STATE_ABOUT;
+                            break;
+                        case 3:
+                            CloseWindow();
+                            break;
+                    }
+                }
+                break;
+            }
+
+            case STATE_ABOUT:
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE)) {
+                    state = STATE_MAIN_MENU;
+                }
+                break;
+
             case STATE_CHAR_SELECT:
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    p1sel.confirmed = false;
+                    p2sel.confirmed = false;
+                    state = STATE_MAIN_MENU;
+                    break;
+                }
                 if (IsKeyPressed(KEY_A) && p1sel.cursor > 0) p1sel.cursor--;
                 if (IsKeyPressed(KEY_D) && p1sel.cursor < CHAR_COUNT - 1) p1sel.cursor++;
                 if (IsKeyPressed(KEY_SPACE) && !p1sel.confirmed) {
@@ -754,20 +948,24 @@ int main(void) {
                     p2sel.confirmed = true;
                 }
                 if (p1sel.confirmed && p2sel.confirmed) {
-                    p1 = InitFighter(p1sel.selected, 160.0f, 1);
-                    p2 = InitFighter(p2sel.selected, 740.0f, -1);
-                    for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
-                    gDomainAnnounce.active = false;
-                    domainCasterPlayer = 0;
-                    domainTimer = 0.0f;
-                    clash.active = false;
-                    state = STATE_BATTLE;
+                    if (frontend.launchBattleAfterSelect) {
+                        ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                        state = STATE_BATTLE;
+                    } else {
+                        state = STATE_MAIN_MENU;
+                    }
                 }
                 break;
 
             case STATE_BATTLE:
             case STATE_DOMAIN:
             case STATE_DOMAIN_CLASH: {
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    frontend.pausedFromState = state;
+                    frontend.pauseCursor = 0;
+                    state = STATE_PAUSE;
+                    break;
+                }
                 float p1Regen = CE_REGEN_RATE * (p1.charData.traits.hasCopy ? 2.0f : 1.0f);
                 float p2Regen = CE_REGEN_RATE * (p2.charData.traits.hasCopy ? 2.0f : 1.0f);
                 if (!clash.active && state != STATE_DOMAIN) {
@@ -825,16 +1023,40 @@ int main(void) {
                 }
                 break;
             }
+            case STATE_PAUSE:
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    state = frontend.pausedFromState;
+                    break;
+                }
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.pauseCursor = (frontend.pauseCursor + 1) % 4;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.pauseCursor = (frontend.pauseCursor + 3) % 4;
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                    if (frontend.pauseCursor == 0) {
+                        state = frontend.pausedFromState;
+                    } else if (frontend.pauseCursor == 1) {
+                        p1sel.confirmed = false;
+                        p2sel.confirmed = false;
+                        frontend.launchBattleAfterSelect = false;
+                        state = STATE_CHAR_SELECT;
+                    } else if (frontend.pauseCursor == 2) {
+                        p1sel.confirmed = false;
+                        p2sel.confirmed = false;
+                        state = STATE_MAIN_MENU;
+                    } else {
+                        CloseWindow();
+                    }
+                }
+                break;
             case STATE_GAME_OVER:
-                if (IsKeyPressed(KEY_ENTER)) {
-                    state = STATE_CHAR_SELECT;
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    state = STATE_MAIN_MENU;
                     p1sel.confirmed = false;
                     p2sel.confirmed = false;
-                    domainCasterPlayer = 0;
-                    domainTimer = 0.0f;
-                    clash.active = false;
-                    for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
-                    gDomainAnnounce.active = false;
+                    break;
+                }
+                if (IsKeyPressed(KEY_ENTER)) {
+                    ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                    state = STATE_BATTLE;
                 }
                 break;
         }
@@ -842,6 +1064,14 @@ int main(void) {
         BeginDrawing();
 
         switch (state) {
+            case STATE_MAIN_MENU:
+                DrawMainMenu(&menuVideo, frontend.cursor);
+                break;
+
+            case STATE_ABOUT:
+                DrawAboutScreen(&menuVideo);
+                break;
+
             case STATE_CHAR_SELECT:
                 DrawCharSelectScreen(p1sel.cursor, p2sel.cursor,
                                      p1sel.confirmed, p2sel.confirmed,
@@ -886,6 +1116,10 @@ int main(void) {
                 DrawHUD(&p1, &p2, clash.timer, true, SCREEN_W);
                 break;
 
+            case STATE_PAUSE:
+                DrawPauseMenu(&menuVideo, frontend.pauseCursor);
+                break;
+
             case STATE_GAME_OVER: {
                 const char* winTxt = (p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!";
                 Color winCol = (p2.hp <= 0.0f) ? p1.charData.bodyColor : p2.charData.bodyColor;
@@ -903,6 +1137,11 @@ int main(void) {
         EndDrawing();
     }
 
+    if (musicLoaded) UnloadMusicStream(bgm);
+    for (int i = 0; i < menuVideo.count; i++) {
+        if (IsTextureValid(menuVideo.frames[i])) UnloadTexture(menuVideo.frames[i]);
+    }
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
