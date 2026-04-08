@@ -1,21 +1,11 @@
-// =============================================================================
-// renders.h — JJK Fighter: Visual Rendering Subsystem
-// =============================================================================
-// Handles ALL drawing calls: particles, domain effects, HUD, arena, fighters.
-// main.c calls these functions — zero rendering logic lives in main.c.
-// =============================================================================
+#ifndef RENDER_H
+#define RENDER_H
 
-#ifndef RENDERS_H
-#define RENDERS_H
-
+#include "fighter.h"
 #include "raylib.h"
-#include "characters.h"
 #include <stdbool.h>
 
-// ---------------------------------------------------------------------------
-// PARTICLE SYSTEM
-// ---------------------------------------------------------------------------
-#define MAX_PARTICLES 512
+#define MAX_PARTICLES 1024
 
 typedef enum {
     PARTICLE_SPARK = 0,
@@ -24,21 +14,23 @@ typedef enum {
     PARTICLE_DOMAIN_SHARD,
     PARTICLE_HIT_BURST,
     PARTICLE_REGEN,
-    PARTICLE_DOMAIN_ANNOUNCE, // Big domain notification burst
+    PARTICLE_DOMAIN_ANNOUNCE,
+    PARTICLE_CLASH_ARC,
+    PARTICLE_HOLLOW_PURPLE,
+    PARTICLE_SLASH_TRAIL
 } ParticleType;
 
 typedef struct {
-    Vector2  pos;
-    Vector2  vel;
-    Color    color;
-    float    life;     // 0..1, counted down
-    float    maxLife;
-    float    size;
+    Vector2 pos;
+    Vector2 vel;
+    Color color;
+    float life;
+    float maxLife;
+    float size;
     ParticleType type;
-    bool     active;
+    bool active;
 } Particle;
 
-// Global particle pool (declared in renders.c)
 extern Particle gParticles[MAX_PARTICLES];
 
 void ParticleSpawn(Vector2 pos, Vector2 vel, Color col, float life, float size, ParticleType type);
@@ -46,9 +38,6 @@ void ParticleSpawnBurst(Vector2 pos, int count, Color col, float speed, float li
 void ParticleUpdate(void);
 void ParticleDraw(void);
 
-// ---------------------------------------------------------------------------
-// SCREEN SHAKE
-// ---------------------------------------------------------------------------
 typedef struct {
     float intensity;
     float duration;
@@ -60,16 +49,14 @@ void ShakeTrigger(float intensity, float duration);
 Vector2 ShakeOffset(void);
 void ShakeUpdate(void);
 
-// ---------------------------------------------------------------------------
-// DOMAIN ANNOUNCEMENT
-// ---------------------------------------------------------------------------
 typedef struct {
     char    text[64];
+    char    subtext[96];
     Color   color;
-    float   timer;   // countdown from ~2.5s
+    float   timer;
     float   maxTime;
     bool    active;
-    int     flash;   // frame counter for flashing
+    int     flash;
 } DomainAnnounce;
 
 extern DomainAnnounce gDomainAnnounce;
@@ -77,39 +64,18 @@ void AnnounceStart(const char* domainName, const char* casterName, Color col);
 void AnnounceUpdate(void);
 void AnnounceDraw(int screenW, int screenH);
 
-// ---------------------------------------------------------------------------
-// DOMAIN BACKGROUND EFFECTS
-// ---------------------------------------------------------------------------
 void DrawDomainBackground(CharacterID casterID, float timer, int screenW, int screenH);
+void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,
+                          int winnerPlayer, float clashDamage, int screenW, int screenH);
 
-// ---------------------------------------------------------------------------
-// ARENA
-// ---------------------------------------------------------------------------
 void DrawArena(int screenW, int screenH, float floorY);
-
-// ---------------------------------------------------------------------------
-// FIGHTER RENDERING
-// ---------------------------------------------------------------------------
-// Forward-declare Fighter so renders.h can accept it.
-// Full definition is in main.c / combat.h.
-typedef struct Fighter Fighter;
-
 void DrawFighterBody(Fighter* f, bool isP1);
-void DrawFighterEffects(Fighter* f); // particles, glow, black flash flash
-
-// ---------------------------------------------------------------------------
-// HUD
-// ---------------------------------------------------------------------------
-void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer,
-             bool domainActive, int screenW);
+void DrawFighterEffects(Fighter* f);
+void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW);
 void DrawCharSelectScreen(int p1Cursor, int p2Cursor,
                           bool p1Confirmed, bool p2Confirmed,
                           int screenW, int screenH);
-
-// ---------------------------------------------------------------------------
-// FULL DRAW PASS HELPERS (called by main.c per state)
-// ---------------------------------------------------------------------------
 void DrawBattleBackground(int screenW, int screenH);
 void DrawGameOverOverlay(const char* winnerText, Color winnerColor, int screenW, int screenH);
 
-#endif // RENDERS_H
+#endif // RENDER_H
