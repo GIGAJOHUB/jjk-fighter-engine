@@ -1,0 +1,65 @@
+# Build outputs
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.o
+*.obj
+*.lo
+*.la
+
+# Debug / profiling artifacts
+*.pdb
+*.idb
+*.ilk
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# Dependency / package folders
+build/
+bin/
+dist/
+out/
+Debug/
+Release/
+x64/
+x86/
+
+# CMake / autotools / make
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+makedep*
+libtool
+aclocal.m4
+autom4te.cache/
+m4/
+
+# IDE / editor metadata
+.vscode/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# OS-generated junk
+.DS_Store
+Thumbs.db
+Desktop.ini
