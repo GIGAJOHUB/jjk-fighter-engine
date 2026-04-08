@@ -29,6 +29,9 @@
 #define YUJI_COMBO_WINDOW        2.2f
 #define MAX_MENU_FRAMES        128
 
+static Font gRetroFont = {0};
+static bool gRetroFontLoaded = false;
+
 typedef enum {
     STATE_MAIN_MENU = 0,
     STATE_ABOUT,
@@ -68,6 +71,16 @@ typedef struct {
     bool launchBattleAfterSelect;
     GameState pausedFromState;
 } FrontendState;
+
+static Vector2 RetroMeasure(const char* text, float fontSize, float spacing) {
+    if (gRetroFontLoaded) return MeasureTextEx(gRetroFont, text, fontSize, spacing);
+    return (Vector2){ (float)MeasureText(text, (int)fontSize), fontSize };
+}
+
+static void RetroText(const char* text, Vector2 pos, float fontSize, float spacing, Color color) {
+    if (gRetroFontLoaded) DrawTextEx(gRetroFont, text, pos, fontSize, spacing, color);
+    else DrawText(text, (int)pos.x, (int)pos.y, (int)fontSize, color);
+}
 
 static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     Fighter f;
@@ -783,52 +796,60 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
     int count = 4;
     DrawMenuBackground(video);
 
-    DrawText("JUJUTSU KAISEN", 270, 44, 34, (Color){235, 240, 255, 255});
-    DrawText("CURSED CLASH 16-BIT EDITION", 220, 82, 24, (Color){255, 215, 120, 255});
+    DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
+    RetroText("URUSAI MANIA", (Vector2){ 245, 56 }, 34.0f, 1.0f, (Color){240, 244, 255, 255});
+    RetroText("FIGHTER GAME ENGINE", (Vector2){ 230, 94 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
 
-    DrawPixelPanel((Rectangle){ 282, 148, 396, 248 }, (Color){18, 14, 30, 215}, (Color){130, 185, 255, 255});
-    DrawText("A custom fight-night build by GIGAJOHUB + Codex", 304, 168, 16, (Color){200, 220, 255, 235});
-    DrawText("Looped 8-bit opening theme and animated menu background loaded.", 304, 192, 14, (Color){255, 225, 150, 220});
+    DrawPixelPanel((Rectangle){ 240, 154, 480, 264 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
+    RetroText("16-BIT ARCADE FRONTEND", (Vector2){ 280, 178 }, 16.0f, 1.0f, (Color){200, 220, 255, 235});
+    RetroText("Looped theme and animated intro now ship with the game.", (Vector2){ 270, 204 }, 12.0f, 1.0f, (Color){255, 225, 150, 220});
 
     for (int i = 0; i < count; i++) {
-        Rectangle row = { 316, 228 + i * 40.0f, 328, 30 };
+        Rectangle row = { 294, 244 + i * 40.0f, 372, 30 };
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
-        DrawText(items[i], 340, (int)row.y + 6, 18, selected ? WHITE : (Color){210, 210, 230, 240});
+        Vector2 size = RetroMeasure(items[i], 16.0f, 1.0f);
+        RetroText(items[i],
+                  (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 6.0f },
+                  16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
-    DrawText("UP / DOWN or W / S to move  |  ENTER / SPACE to select", 212, 430, 16, (Color){220, 220, 235, 240});
+    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 438 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 458 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
 }
 
 static void DrawAboutScreen(const MenuVideo* video) {
     DrawMenuBackground(video);
     DrawPixelPanel((Rectangle){ 140, 82, 680, 360 }, (Color){18, 14, 30, 225}, (Color){255, 215, 120, 255});
-    DrawText("INTRODUCE US", 352, 104, 28, WHITE);
-    DrawText("JJK Fighter Engine is a custom 2D C + Raylib arena brawler.", 172, 160, 20, (Color){220, 230, 255, 240});
-    DrawText("This version adds a 16-bit front-end, pause flow, looped music,", 172, 196, 20, (Color){220, 230, 255, 240});
-    DrawText("animated menu background, domain clashes, and signature ultimates.", 172, 232, 20, (Color){220, 230, 255, 240});
-    DrawText("Controls: X / NUM4 = Ultimate, ESC = Pause / Back to menu layer.", 172, 286, 18, (Color){255, 222, 140, 240});
-    DrawText("Press ENTER or ESC to return.", 280, 362, 20, (Color){255, 255, 255, 240});
+    RetroText("INTRODUCE US", (Vector2){ 336, 108 }, 24.0f, 1.0f, WHITE);
+    RetroText("URUSAI MANIA is a custom 2D C + Raylib arena brawler.", (Vector2){ 174, 164 }, 15.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("This build adds a sharper retro frontend, pause flow,", (Vector2){ 174, 198 }, 15.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("looped opening theme, animated menu background,", (Vector2){ 174, 224 }, 15.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("and signature domain / ultimate spectacle.", (Vector2){ 174, 250 }, 15.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("CONTROLS: X / NUM4 = ULT, ESC = PAUSE / BACK", (Vector2){ 176, 304 }, 14.0f, 1.0f, (Color){255, 222, 140, 240});
+    RetroText("PRESS ENTER OR ESC TO RETURN", (Vector2){ 258, 370 }, 16.0f, 1.0f, (Color){255, 255, 255, 240});
 }
 
 static void DrawPauseMenu(const MenuVideo* video, int cursor) {
     static const char* items[] = { "RESUME", "CHARACTER SELECT", "MAIN MENU", "EXIT GAME" };
     DrawMenuBackground(video);
     DrawPixelPanel((Rectangle){ 300, 140, 360, 230 }, (Color){16, 12, 26, 230}, (Color){255, 205, 120, 255});
-    DrawText("PAUSED", 416, 166, 30, WHITE);
+    RetroText("PAUSED", (Vector2){ 408, 166 }, 26.0f, 1.0f, WHITE);
     for (int i = 0; i < 4; i++) {
         Rectangle row = { 334, 214 + i * 34.0f, 290, 26 };
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){90, 80, 150, 220} : (Color){32, 28, 48, 215});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
-        DrawText(items[i], 360, (int)row.y + 4, 18, selected ? WHITE : (Color){215, 215, 230, 240});
+        Vector2 size = RetroMeasure(items[i], 14.0f, 1.0f);
+        RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 5.0f }, 14.0f, 1.0f,
+                  selected ? WHITE : (Color){215, 215, 230, 240});
     }
-    DrawText("ESC resumes instantly.", 370, 336, 16, (Color){220, 220, 235, 235});
+    RetroText("ESC RESUMES INSTANTLY", (Vector2){ 356, 336 }, 12.0f, 1.0f, (Color){220, 220, 235, 235});
 }
 
 int main(void) {
-    InitWindow(SCREEN_W, SCREEN_H, "JUJUTSU KAISEN - Cursed Clash");
+    InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
     SetTargetFPS(60);
     InitAudioDevice();
 
@@ -858,6 +879,12 @@ int main(void) {
         SetMusicVolume(bgm, 0.55f);
         PlayMusicStream(bgm);
         musicLoaded = true;
+    }
+
+    if (FileExists("assets/fonts/GOUDOS.TTF")) {
+        gRetroFont = LoadFontEx("assets/fonts/GOUDOS.TTF", 32, 0, 0);
+        gRetroFontLoaded = true;
+        SetTextureFilter(gRetroFont.texture, TEXTURE_FILTER_POINT);
     }
 
     GameState state = STATE_MAIN_MENU;
@@ -1138,6 +1165,7 @@ int main(void) {
     }
 
     if (musicLoaded) UnloadMusicStream(bgm);
+    if (gRetroFontLoaded) UnloadFont(gRetroFont);
     for (int i = 0; i < menuVideo.count; i++) {
         if (IsTextureValid(menuVideo.frames[i])) UnloadTexture(menuVideo.frames[i]);
     }

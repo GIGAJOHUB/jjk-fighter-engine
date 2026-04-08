@@ -79,10 +79,12 @@ If you plan to wire in the networking layer during your local build, make sure E
 The repository includes a ready-to-run Windows build:
 
 - `jjk_game.exe`
+- `Urusai_Mania_Portable/`
 - `assets/menu_theme.mp3`
 - `assets/menu_frames/`
+- `assets/fonts/GOUDOS.TTF`
 
-This lets players launch the current packaged version directly without setting up MSYS2, GCC, or Raylib first.
+For the easiest Git download, use the full `Urusai_Mania_Portable/` folder so the executable, looping music, retro font, and animated menu frames stay together.
 
 ## Controls
 
@@ -116,6 +118,7 @@ This lets players launch the current packaged version directly without setting u
 - `W` / `S` or `Up Arrow` / `Down Arrow` move through the main menu and pause menu.
 - `Enter` or `Space` confirms a menu selection.
 - The title screen loops the bundled 8-bit opening theme and animated menu background.
+- The front-end uses a bundled retro DOS-style font for the `Urusai Mania` presentation.
 
 ## Repository Contents
 
