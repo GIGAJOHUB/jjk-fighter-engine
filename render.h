@@ -63,6 +63,8 @@ extern DomainAnnounce gDomainAnnounce;
 void AnnounceStart(const char* domainName, const char* casterName, Color col);
 void AnnounceUpdate(void);
 void AnnounceDraw(int screenW, int screenH);
+void SetUIFont(Font font, bool loaded);
+void SetGojoPortrait(Texture2D portrait, bool loaded);
 
 void DrawDomainBackground(CharacterID casterID, float timer, int screenW, int screenH);
 void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,

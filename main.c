@@ -28,6 +28,7 @@
 #define DODGE_COOLDOWN_FRAMES   40
 #define YUJI_COMBO_WINDOW        2.2f
 #define MAX_MENU_FRAMES        128
+#define MAX_FIGHT_FRAMES       192
 
 static Font gRetroFont = {0};
 static bool gRetroFontLoaded = false;
@@ -64,6 +65,14 @@ typedef struct {
     float timer;
     float frameDuration;
 } MenuVideo;
+
+typedef struct {
+    Texture2D frames[MAX_FIGHT_FRAMES];
+    int count;
+    int currentFrame;
+    float timer;
+    float frameDuration;
+} FightVideo;
 
 typedef struct {
     int cursor;
@@ -646,9 +655,9 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     int rightKey  = isP1 ? KEY_D          : KEY_RIGHT;
     int jumpKey   = isP1 ? KEY_W          : KEY_UP;
     int crouchKey = isP1 ? KEY_LEFT_SHIFT : KEY_RIGHT_SHIFT;
-    int atkKey    = isP1 ? KEY_F          : KEY_KP_0;
-    int rctKey    = isP1 ? KEY_C          : KEY_KP_1;
-    int domainKey = isP1 ? KEY_R          : KEY_KP_2;
+    int atkKey    = isP1 ? KEY_ONE        : KEY_KP_0;
+    int rctKey    = isP1 ? KEY_TWO        : KEY_KP_1;
+    int domainKey = isP1 ? KEY_THREE      : KEY_KP_2;
     int dodgeKey  = isP1 ? KEY_Q          : KEY_KP_3;
     int ultKey    = isP1 ? KEY_X          : KEY_KP_4;
     float spd     = f->speed;
@@ -848,6 +857,36 @@ static void DrawPauseMenu(const MenuVideo* video, int cursor) {
     RetroText("ESC RESUMES INSTANTLY", (Vector2){ 356, 336 }, 12.0f, 1.0f, (Color){220, 220, 235, 235});
 }
 
+static void UpdateFightVideo(FightVideo* video) {
+    if (video->count <= 0) return;
+    video->timer += GetFrameTime();
+    if (video->timer >= video->frameDuration) {
+        video->timer = 0.0f;
+        video->currentFrame = (video->currentFrame + 1) % video->count;
+    }
+}
+
+static void DrawFightVideoBackground(const FightVideo* video, bool domainActive, CharacterID casterId) {
+    if (video->count > 0 && IsTextureValid(video->frames[video->currentFrame])) {
+        Rectangle src = {0, 0, (float)video->frames[video->currentFrame].width, (float)video->frames[video->currentFrame].height};
+        Rectangle dst = {0, 0, SCREEN_W, SCREEN_H};
+        DrawTexturePro(video->frames[video->currentFrame], src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+    } else {
+        DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, (Color){12, 10, 22, 255}, (Color){25, 16, 36, 255});
+    }
+
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 70});
+
+    if (domainActive) {
+        Color tint = (Color){120, 60, 180, 85};
+        if (casterId == CHAR_GOJO) tint = (Color){60, 100, 255, 95};
+        else if (casterId == CHAR_SUKUNA) tint = (Color){255, 50, 60, 90};
+        else if (casterId == CHAR_YUTA) tint = (Color){220, 90, 255, 85};
+        DrawRectangleGradientH(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(tint, 0.10f), tint);
+        DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(BLACK, 0.0f), ColorAlpha(tint, 0.14f));
+    }
+}
+
 int main(void) {
     InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
     SetTargetFPS(60);
@@ -858,7 +897,10 @@ int main(void) {
     Music bgm = {0};
     bool musicLoaded = false;
     MenuVideo menuVideo = {0};
+    FightVideo fightVideo = {0};
     FrontendState frontend = {0};
+    Texture2D gojoPortrait = {0};
+    bool gojoPortraitLoaded = false;
     frontend.cursor = 0;
     frontend.pauseCursor = 0;
     frontend.launchBattleAfterSelect = false;
@@ -881,11 +923,29 @@ int main(void) {
         musicLoaded = true;
     }
 
-    if (FileExists("assets/fonts/GOUDOS.TTF")) {
-        gRetroFont = LoadFontEx("assets/fonts/GOUDOS.TTF", 32, 0, 0);
+    FilePathList fightPaths = LoadDirectoryFilesEx("assets/fight_frames", ".png", false);
+    if (fightPaths.count > 0) {
+        fightVideo.count = (fightPaths.count < MAX_FIGHT_FRAMES) ? fightPaths.count : MAX_FIGHT_FRAMES;
+        fightVideo.frameDuration = 1.0f / 8.0f;
+        for (int i = 0; i < fightVideo.count; i++) {
+            fightVideo.frames[i] = LoadTexture(fightPaths.paths[i]);
+        }
+    }
+    UnloadDirectoryFiles(fightPaths);
+
+    if (FileExists("assets/fonts/Retro Gaming.ttf")) {
+        gRetroFont = LoadFontEx("assets/fonts/Retro Gaming.ttf", 32, 0, 0);
         gRetroFontLoaded = true;
         SetTextureFilter(gRetroFont.texture, TEXTURE_FILTER_POINT);
     }
+    SetUIFont(gRetroFont, gRetroFontLoaded);
+
+    if (FileExists("assets/gojo.png")) {
+        gojoPortrait = LoadTexture("assets/gojo.png");
+        SetTextureFilter(gojoPortrait, TEXTURE_FILTER_POINT);
+        gojoPortraitLoaded = true;
+    }
+    SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
 
     GameState state = STATE_MAIN_MENU;
     SelectState p1sel = { 0, CHAR_SUKUNA, false };
@@ -912,6 +972,9 @@ int main(void) {
 
         if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_PAUSE) {
             UpdateMenuVideo(&menuVideo);
+        }
+        if (state == STATE_BATTLE || state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) {
+            UpdateFightVideo(&fightVideo);
         }
 
         ShakeUpdate();
@@ -1106,7 +1169,7 @@ int main(void) {
                 break;
 
             case STATE_BATTLE:
-                DrawBattleBackground(SCREEN_W, SCREEN_H);
+                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawFighterBody(&p1, true);
@@ -1118,7 +1181,9 @@ int main(void) {
             case STATE_DOMAIN: {
                 Fighter* caster = (domainCasterPlayer == 1) ? &p1 : &p2;
                 Fighter* target = (domainCasterPlayer == 1) ? &p2 : &p1;
+                DrawFightVideoBackground(&fightVideo, true, caster->charData.id);
                 DrawDomainBackground(caster->charData.id, domainTimer, SCREEN_W, SCREEN_H);
+                DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 80});
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawFighterBody(&p1, true);
@@ -1134,6 +1199,7 @@ int main(void) {
             }
 
             case STATE_DOMAIN_CLASH:
+                DrawFightVideoBackground(&fightVideo, true, CHAR_COUNT);
                 DrawDomainClashScene(&p1, &p2, clash.timer, clash.duration,
                                      clash.winnerPlayer, clash.damage, SCREEN_W, SCREEN_H);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
@@ -1150,7 +1216,7 @@ int main(void) {
             case STATE_GAME_OVER: {
                 const char* winTxt = (p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!";
                 Color winCol = (p2.hp <= 0.0f) ? p1.charData.bodyColor : p2.charData.bodyColor;
-                DrawBattleBackground(SCREEN_W, SCREEN_H);
+                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawFighterBody(&p1, true);
@@ -1166,8 +1232,12 @@ int main(void) {
 
     if (musicLoaded) UnloadMusicStream(bgm);
     if (gRetroFontLoaded) UnloadFont(gRetroFont);
+    if (gojoPortraitLoaded) UnloadTexture(gojoPortrait);
     for (int i = 0; i < menuVideo.count; i++) {
         if (IsTextureValid(menuVideo.frames[i])) UnloadTexture(menuVideo.frames[i]);
+    }
+    for (int i = 0; i < fightVideo.count; i++) {
+        if (IsTextureValid(fightVideo.frames[i])) UnloadTexture(fightVideo.frames[i]);
     }
     CloseAudioDevice();
     CloseWindow();

@@ -82,7 +82,9 @@ The repository includes a ready-to-run Windows build:
 - `Urusai_Mania_Portable/`
 - `assets/menu_theme.mp3`
 - `assets/menu_frames/`
-- `assets/fonts/GOUDOS.TTF`
+- `assets/fight_frames/`
+- `assets/fighter_UI_final.mp4`
+- `assets/fonts/Retro Gaming.ttf`
 
 For the easiest Git download, use the full `Urusai_Mania_Portable/` folder so the executable, looping music, retro font, and animated menu frames stay together.
 
@@ -101,9 +103,9 @@ For the easiest Git download, use the full `Urusai_Mania_Portable/` folder so th
 | Move Right | `D` | `Right Arrow` |
 | Jump | `W` | `Up Arrow` |
 | Crouch | `Left Shift` | `Right Shift` |
-| Attack | `F` | `Numpad 0` |
-| Reversed Cursed Technique (Heal) | `C` | `Numpad 1` |
-| Domain Expansion | `R` | `Numpad 2` |
+| Positive Cursed Energy Attack | `1` | `Numpad 0` |
+| Reversed Cursed Technique (Heal) | `2` | `Numpad 1` |
+| Domain Expansion | `3` | `Numpad 2` |
 | Dodge / Toji Dash | `Q` | `Numpad 3` |
 | Ultimate Ability | `X` | `Numpad 4` |
 
@@ -118,7 +120,8 @@ For the easiest Git download, use the full `Urusai_Mania_Portable/` folder so th
 - `W` / `S` or `Up Arrow` / `Down Arrow` move through the main menu and pause menu.
 - `Enter` or `Space` confirms a menu selection.
 - The title screen loops the bundled 8-bit opening theme and animated menu background.
-- The front-end uses a bundled retro DOS-style font for the `Urusai Mania` presentation.
+- The front-end uses the bundled `Retro Gaming.ttf` font for the `Urusai Mania` presentation.
+- Live fights loop the bundled fighter UI background video as a frame sequence behind the arena and UI.
 
 ## Repository Contents
 

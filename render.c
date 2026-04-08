@@ -9,6 +9,30 @@
 Particle gParticles[MAX_PARTICLES];
 ScreenShake gShake = {0};
 DomainAnnounce gDomainAnnounce = {0};
+static Font gUiFont = {0};
+static bool gUiFontLoaded = false;
+static Texture2D gGojoPortrait = {0};
+static bool gGojoPortraitLoaded = false;
+
+static Vector2 UiMeasure(const char* text, float fontSize, float spacing) {
+    if (gUiFontLoaded) return MeasureTextEx(gUiFont, text, fontSize, spacing);
+    return (Vector2){ (float)MeasureText(text, (int)fontSize), fontSize };
+}
+
+static void UiText(const char* text, Vector2 pos, float fontSize, float spacing, Color color) {
+    if (gUiFontLoaded) DrawTextEx(gUiFont, text, pos, fontSize, spacing, color);
+    else DrawText(text, (int)pos.x, (int)pos.y, (int)fontSize, color);
+}
+
+void SetUIFont(Font font, bool loaded) {
+    gUiFont = font;
+    gUiFontLoaded = loaded;
+}
+
+void SetGojoPortrait(Texture2D portrait, bool loaded) {
+    gGojoPortrait = portrait;
+    gGojoPortraitLoaded = loaded;
+}
 
 static Color Lighten(Color c, int amount) {
     c.r = (unsigned char)Clamp(c.r + amount, 0, 255);
@@ -174,15 +198,15 @@ void AnnounceDraw(int screenW, int screenH) {
 
     const char* label = "DOMAIN EXPANSION";
     int labelSize = 34;
-    int lw = MeasureText(label, labelSize);
-    DrawText(label, screenW / 2 - lw / 2, screenH / 2 - 54, labelSize, WHITE);
+    int lw = (int)UiMeasure(label, (float)labelSize, 1.0f).x;
+    UiText(label, (Vector2){ (float)(screenW / 2 - lw / 2), (float)(screenH / 2 - 54) }, (float)labelSize, 1.0f, WHITE);
 
     int nameSize = 28;
-    int nw = MeasureText(gDomainAnnounce.text, nameSize);
-    DrawText(gDomainAnnounce.text, screenW / 2 - nw / 2, screenH / 2 - 10, nameSize, Lighten(gDomainAnnounce.color, 80));
+    int nw = (int)UiMeasure(gDomainAnnounce.text, (float)nameSize, 1.0f).x;
+    UiText(gDomainAnnounce.text, (Vector2){ (float)(screenW / 2 - nw / 2), (float)(screenH / 2 - 10) }, (float)nameSize, 1.0f, Lighten(gDomainAnnounce.color, 80));
 
-    int sw = MeasureText(gDomainAnnounce.subtext, 16);
-    DrawText(gDomainAnnounce.subtext, screenW / 2 - sw / 2, screenH / 2 + 28, 16, (Color){255, 240, 170, (unsigned char)(alpha * 255.0f)});
+    int sw = (int)UiMeasure(gDomainAnnounce.subtext, 16.0f, 1.0f).x;
+    UiText(gDomainAnnounce.subtext, (Vector2){ (float)(screenW / 2 - sw / 2), (float)(screenH / 2 + 28) }, 16.0f, 1.0f, (Color){255, 240, 170, (unsigned char)(alpha * 255.0f)});
 }
 
 static void DrawStars(int screenW, int screenH, Color color, float speed) {
@@ -260,19 +284,19 @@ void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,
     }
 
     const char* title = "DOMAIN CLASH";
-    int tw = MeasureText(title, 44);
-    DrawText(title, screenW / 2 - tw / 2, 42, 44, WHITE);
+    int tw = (int)UiMeasure(title, 44.0f, 1.0f).x;
+    UiText(title, (Vector2){ (float)(screenW / 2 - tw / 2), 42.0f }, 44.0f, 1.0f, WHITE);
 
     char result[96];
     if (winnerPlayer == 0) snprintf(result, sizeof(result), "Perfect collision - no sure hit");
     else snprintf(result, sizeof(result), "Player %d overwhelms the clash", winnerPlayer);
-    int rw = MeasureText(result, 18);
-    DrawText(result, screenW / 2 - rw / 2, 96, 18, (Color){255, 235, 170, 255});
+    int rw = (int)UiMeasure(result, 18.0f, 1.0f).x;
+    UiText(result, (Vector2){ (float)(screenW / 2 - rw / 2), 96.0f }, 18.0f, 1.0f, (Color){255, 235, 170, 255});
 
     char dmg[64];
     snprintf(dmg, sizeof(dmg), "Damage on resolve: %.0f", clashDamage);
-    int dw = MeasureText(dmg, 22);
-    DrawText(dmg, screenW / 2 - dw / 2, 126, 22, (Color){255, 255, 255, 220});
+    int dw = (int)UiMeasure(dmg, 22.0f, 1.0f).x;
+    UiText(dmg, (Vector2){ (float)(screenW / 2 - dw / 2), 126.0f }, 22.0f, 1.0f, (Color){255, 255, 255, 220});
 }
 
 void DrawArena(int screenW, int screenH, float floorY) {
@@ -443,15 +467,15 @@ static void DrawTraitLine(Fighter* f, int x, int y, bool alignRight) {
     if (f->isHeavenlyRestricted) strcat(line, "[HEAVENLY RESTRICTION] ");
 
     if (line[0] == '\0') return;
-    int w = MeasureText(line, 10);
-    DrawText(line, alignRight ? x - w : x, y, 10, ColorAlpha(WHITE, 0.8f));
+    int w = (int)UiMeasure(line, 10.0f, 1.0f).x;
+    UiText(line, (Vector2){ (float)(alignRight ? x - w : x), (float)y }, 10.0f, 1.0f, ColorAlpha(WHITE, 0.8f));
 }
 
 void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW) {
     int barW = 300;
 
-    DrawText(p1->charData.name, 42, 12, 20, p1->charData.bodyColor);
-    DrawText(p1->charData.fullTitle, 42, 34, 12, (Color){200, 205, 220, 210});
+    UiText(p1->charData.name, (Vector2){42, 12}, 20.0f, 1.0f, p1->charData.bodyColor);
+    UiText(p1->charData.fullTitle, (Vector2){42, 34}, 12.0f, 1.0f, (Color){200, 205, 220, 210});
     DrawPremiumBar(p1->hp, p1->maxHP, 42, 54, barW, 24, (Color){80, 230, 120, 255}, (Color){40, 18, 22, 220}, false);
     DrawPremiumBar(p1->cursedEnergy, p1->maxCE, 42, 84, barW, 14, p1->charData.ceColor, (Color){18, 16, 28, 220}, false);
     DrawTraitLine(p1, 42, 104, false);
@@ -459,18 +483,18 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
     char p1Ult[128];
     snprintf(p1Ult, sizeof(p1Ult), "ULT [%s]: %s", "X",
              p1->ultUsed ? "USED" : (p1->ultReady || !p1->ultUsed ? p1->charData.ultimateName : "LOCKED"));
-    DrawText(p1Ult, 42, 118, 11, p1->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
+    UiText(p1Ult, (Vector2){42, 118}, 11.0f, 1.0f, p1->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
     if (p1->charData.id == CHAR_YUJI && !p1->ultUsed) {
         char combo[32];
         snprintf(combo, sizeof(combo), "Combo: %d / 3", p1->comboHits);
-        DrawText(combo, 42, 132, 11, (Color){255, 210, 120, 220});
+        UiText(combo, (Vector2){42, 132}, 11.0f, 1.0f, (Color){255, 210, 120, 220});
     }
 
     int rightX = screenW - 42;
-    int p2NameW = MeasureText(p2->charData.name, 20);
-    DrawText(p2->charData.name, rightX - p2NameW, 12, 20, p2->charData.bodyColor);
-    int p2TitleW = MeasureText(p2->charData.fullTitle, 12);
-    DrawText(p2->charData.fullTitle, rightX - p2TitleW, 34, 12, (Color){200, 205, 220, 210});
+    int p2NameW = (int)UiMeasure(p2->charData.name, 20.0f, 1.0f).x;
+    UiText(p2->charData.name, (Vector2){ (float)(rightX - p2NameW), 12.0f }, 20.0f, 1.0f, p2->charData.bodyColor);
+    int p2TitleW = (int)UiMeasure(p2->charData.fullTitle, 12.0f, 1.0f).x;
+    UiText(p2->charData.fullTitle, (Vector2){ (float)(rightX - p2TitleW), 34.0f }, 12.0f, 1.0f, (Color){200, 205, 220, 210});
     DrawPremiumBar(p2->hp, p2->maxHP, rightX, 54, barW, 24, (Color){80, 230, 120, 255}, (Color){40, 18, 22, 220}, true);
     DrawPremiumBar(p2->cursedEnergy, p2->maxCE, rightX, 84, barW, 14, p2->charData.ceColor, (Color){18, 16, 28, 220}, true);
     DrawTraitLine(p2, rightX, 104, true);
@@ -478,23 +502,23 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
     char p2Ult[128];
     snprintf(p2Ult, sizeof(p2Ult), "ULT [%s]: %s", "NUM4",
              p2->ultUsed ? "USED" : (p2->ultReady || !p2->ultUsed ? p2->charData.ultimateName : "LOCKED"));
-    int p2UltW = MeasureText(p2Ult, 11);
-    DrawText(p2Ult, rightX - p2UltW, 118, 11, p2->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
+    int p2UltW = (int)UiMeasure(p2Ult, 11.0f, 1.0f).x;
+    UiText(p2Ult, (Vector2){ (float)(rightX - p2UltW), 118.0f }, 11.0f, 1.0f, p2->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
     if (p2->charData.id == CHAR_YUJI && !p2->ultUsed) {
         char combo[32];
         snprintf(combo, sizeof(combo), "Combo: %d / 3", p2->comboHits);
-        int cw = MeasureText(combo, 11);
-        DrawText(combo, rightX - cw, 132, 11, (Color){255, 210, 120, 220});
+        int cw = (int)UiMeasure(combo, 11.0f, 1.0f).x;
+        UiText(combo, (Vector2){ (float)(rightX - cw), 132.0f }, 11.0f, 1.0f, (Color){255, 210, 120, 220});
     }
 
     const char* center = domainActive ? "DOMAIN ACTIVE" : "VS";
-    int cw = MeasureText(center, 26);
-    DrawText(center, screenW / 2 - cw / 2, 24, 26, (Color){230, 220, 255, 230});
+    int cw = (int)UiMeasure(center, 26.0f, 1.0f).x;
+    UiText(center, (Vector2){ (float)(screenW / 2 - cw / 2), 24.0f }, 26.0f, 1.0f, (Color){230, 220, 255, 230});
     if (domainActive) {
         char timer[64];
         snprintf(timer, sizeof(timer), "Window %.1fs", domainTimer);
-        int tw = MeasureText(timer, 18);
-        DrawText(timer, screenW / 2 - tw / 2, 56, 18, (Color){255, 240, 120, 240});
+        int tw = (int)UiMeasure(timer, 18.0f, 1.0f).x;
+        UiText(timer, (Vector2){ (float)(screenW / 2 - tw / 2), 56.0f }, 18.0f, 1.0f, (Color){255, 240, 120, 240});
     }
 }
 
@@ -504,11 +528,11 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     DrawStars(screenW, screenH, (Color){150, 170, 255, 255}, 4.0f);
 
     const char* title = "SELECT YOUR SORCERER";
-    int tw = MeasureText(title, 34);
-    DrawText(title, screenW / 2 - tw / 2, 26, 34, (Color){235, 220, 255, 255});
+    int tw = (int)UiMeasure(title, 30.0f, 1.0f).x;
+    UiText(title, (Vector2){ (float)(screenW / 2 - tw / 2), 26.0f }, 30.0f, 1.0f, (Color){235, 220, 255, 255});
 
     int slotW = 150;
-    int slotH = 210;
+    int slotH = 236;
     int gap = 16;
     int total = CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap;
     int startX = (screenW - total) / 2;
@@ -520,9 +544,15 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
         bool p2Here = (p2Cursor == i);
 
         DrawRectangleRounded((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, (Color){24, 16, 40, 220});
-        DrawRectangleRounded((Rectangle){ x + 10, 102, slotW - 20, 92 }, 0.08f, 8, ColorAlpha(cd.bodyColor, 0.85f));
-        DrawCircle(x + slotW / 2, 142, 22, ColorAlpha(BLACK, 0.20f));
-        DrawRectangle(x + slotW / 2 - 14, 146, 28, 34, ColorAlpha(BLACK, 0.25f));
+        DrawRectangleRounded((Rectangle){ x + 10, 102, slotW - 20, 110 }, 0.08f, 8, ColorAlpha(cd.bodyColor, 0.85f));
+        if (cd.id == CHAR_GOJO && gGojoPortraitLoaded) {
+            Rectangle src = {0, 0, (float)gGojoPortrait.width, (float)gGojoPortrait.height};
+            Rectangle dst = {(float)(x + 26), 102.0f, 98.0f, 110.0f};
+            DrawTexturePro(gGojoPortrait, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+        } else {
+            DrawCircle(x + slotW / 2, 150, 22, ColorAlpha(BLACK, 0.20f));
+            DrawRectangle(x + slotW / 2 - 14, 154, 28, 34, ColorAlpha(BLACK, 0.25f));
+        }
 
         Color border = (Color){70, 50, 120, 180};
         if (p1Here && p2Here) border = (Color){255, 220, 70, 255};
@@ -530,18 +560,18 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
         else if (p2Here) border = (Color){255, 90, 90, 255};
         DrawRectangleRoundedLines((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, border);
 
-        int nw = MeasureText(cd.name, 18);
-        DrawText(cd.name, x + slotW / 2 - nw / 2, 204, 18, WHITE);
-        int fw = MeasureText(cd.fullTitle, 11);
-        DrawText(cd.fullTitle, x + slotW / 2 - fw / 2, 228, 11, (Color){200, 205, 220, 220});
-        int uw = MeasureText(cd.ultimateName, 11);
-        DrawText(cd.ultimateName, x + slotW / 2 - uw / 2, 246, 11, ColorAlpha(cd.ceColor, 0.95f));
+        int nw = (int)UiMeasure(cd.name, 16.0f, 1.0f).x;
+        UiText(cd.name, (Vector2){ (float)(x + slotW / 2 - nw / 2), 220.0f }, 16.0f, 1.0f, WHITE);
+        int fw = (int)UiMeasure(cd.fullTitle, 9.0f, 1.0f).x;
+        UiText(cd.fullTitle, (Vector2){ (float)(x + slotW / 2 - fw / 2), 242.0f }, 9.0f, 1.0f, (Color){200, 205, 220, 220});
+        int uw = (int)UiMeasure(cd.ultimateName, 9.0f, 1.0f).x;
+        UiText(cd.ultimateName, (Vector2){ (float)(x + slotW / 2 - uw / 2), 258.0f }, 9.0f, 1.0f, ColorAlpha(cd.ceColor, 0.95f));
     }
 
-    DrawText("P1: A / D + SPACE", 120, screenH - 64, 18, (Color){120, 190, 255, 255});
-    DrawText("P2: LEFT / RIGHT + ENTER", screenW - 330, screenH - 64, 18, (Color){255, 130, 130, 255});
-    if (p1Confirmed) DrawText("PLAYER 1 LOCKED", 120, screenH - 38, 16, (Color){120, 190, 255, 255});
-    if (p2Confirmed) DrawText("PLAYER 2 LOCKED", screenW - 280, screenH - 38, 16, (Color){255, 130, 130, 255});
+    UiText("P1: A / D + SPACE", (Vector2){120, (float)(screenH - 64)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});
+    UiText("P2: LEFT / RIGHT + ENTER", (Vector2){620, (float)(screenH - 64)}, 14.0f, 1.0f, (Color){255, 130, 130, 255});
+    if (p1Confirmed) UiText("PLAYER 1 LOCKED", (Vector2){120, (float)(screenH - 38)}, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+    if (p2Confirmed) UiText("PLAYER 2 LOCKED", (Vector2){650, (float)(screenH - 38)}, 12.0f, 1.0f, (Color){255, 130, 130, 255});
 }
 
 void DrawBattleBackground(int screenW, int screenH) {
@@ -554,10 +584,10 @@ void DrawGameOverOverlay(const char* winnerText, Color winnerColor, int screenW,
     DrawRectangle(0, screenH / 2 - 84, screenW, 4, winnerColor);
     DrawRectangle(0, screenH / 2 + 80, screenW, 4, winnerColor);
 
-    int tw = MeasureText(winnerText, 52);
-    DrawText(winnerText, screenW / 2 - tw / 2, screenH / 2 - 34, 52, winnerColor);
+    int tw = (int)UiMeasure(winnerText, 42.0f, 1.0f).x;
+    UiText(winnerText, (Vector2){ (float)(screenW / 2 - tw / 2), (float)(screenH / 2 - 34) }, 42.0f, 1.0f, winnerColor);
 
     const char* sub = "PRESS ENTER TO REMATCH";
-    int sw = MeasureText(sub, 18);
-    DrawText(sub, screenW / 2 - sw / 2, screenH / 2 + 34, 18, (Color){220, 220, 220, 220});
+    int sw = (int)UiMeasure(sub, 16.0f, 1.0f).x;
+    UiText(sub, (Vector2){ (float)(screenW / 2 - sw / 2), (float)(screenH / 2 + 34) }, 16.0f, 1.0f, (Color){220, 220, 220, 220});
 }
