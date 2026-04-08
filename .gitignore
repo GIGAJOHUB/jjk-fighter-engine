@@ -1,5 +1,6 @@
 # Build outputs
 *.exe
+!jjk_game.exe
 *.out
 *.app
 *.dll

@@ -74,9 +74,43 @@ gcc main.c characters.c render.c -o jjk_game -lraylib -lgdi32 -lwinmm
 
 If you plan to wire in the networking layer during your local build, make sure ENet is also installed and linked for `netcode.c` as part of your MSYS2 toolchain.
 
+## Downloadable Build
+
+The repository includes a ready-to-run Windows build:
+
+- `jjk_game.exe`
+
+This lets players launch the current packaged version directly without setting up MSYS2, GCC, or Raylib first.
+
+## Controls
+
+### Character Select
+
+- **Player 1**: `A` / `D` to move the selection cursor, `Space` to confirm.
+- **Player 2**: `Left Arrow` / `Right Arrow` to move the selection cursor, `Enter` to confirm.
+
+### In-Match Controls
+
+| Action | Player 1 | Player 2 |
+| --- | --- | --- |
+| Move Left | `A` | `Left Arrow` |
+| Move Right | `D` | `Right Arrow` |
+| Jump | `W` | `Up Arrow` |
+| Crouch | `Left Shift` | `Right Shift` |
+| Attack | `F` | `Numpad 0` |
+| Reversed Cursed Technique (Heal) | `C` | `Numpad 1` |
+| Domain Expansion | `R` | `Numpad 2` |
+| Dodge / Toji Dash | `Q` | `Numpad 3` |
+
+### Match Flow
+
+- `Enter` restarts from the game-over screen.
+- Toji uses the same dodge input as other fighters, but because of Heavenly Restriction this functions as his signature directional mobility tool instead of a cursed-technique action.
+
 ## Repository Contents
 
 ```text
+jjk_game.exe   -> packaged Windows build for direct play
 main.c         -> game loop, state machine, input, and combat flow
 characters.c   -> character stats, traits, and roster configuration
 characters.h   -> character data contracts and trait definitions
@@ -88,4 +122,4 @@ netcode.h      -> networking API and packet structures
 
 ## Version Control Policy
 
-Compiled binaries and intermediate artifacts are intentionally excluded from Git. The repository should track source, headers, and documentation only, keeping the history reviewable and the clone footprint clean.
+The repository tracks source, headers, documentation, and the primary packaged Windows build `jjk_game.exe`. Auxiliary binaries and intermediate artifacts remain excluded so the repo stays focused on the canonical source plus one directly playable executable.
