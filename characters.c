@@ -18,6 +18,7 @@ static CharacterTraits DefaultTraits(void) {
     t.isHeavenlyRestricted = false;
     t.hasSixEyes           = false;
     t.ceCostMultiplier     = 1.0f;
+    t.rctCostMultiplier    = 1.0f;
     t.hasRCTEfficiency     = false;
     t.rctHealMultiplier    = 1.0f;
     t.hasCopy              = false;
@@ -48,14 +49,16 @@ CharacterData GetCharacterData(CharacterID id) {
             d.fullTitle    = "King of Curses";
 
             // Highest overall: HP, CE, damage
-            d.maxHP           = 250.0f;
-            d.maxCE           = 500.0f; // Absolute highest CE pool
+            d.maxHP           = 500.0f;
+            d.maxCE           = 720.0f; // Twice Yuta's reserve for top-end pressure
             d.baseSpeed       = 5.2f;
             d.baseAttackDamage= 28.0f;
+            d.projectileDamage= 34.0f;
 
             // Domain: Malevolent Shrine — slash sure-hit
             d.domainName = "Malevolent Shrine";
             d.hasDomain  = true;
+            d.ultimateName = "Dismantle + Cleave";
 
             // Trait: Reverse Cursed Technique Efficiency
             // Combat engine: healAmt = BASE_RCT_HEAL * traits.rctHealMultiplier

@@ -43,6 +43,7 @@ typedef struct {
     //   • Combat engine: cost = baseCost * data.ceCostMultiplier
     bool hasSixEyes;
     float ceCostMultiplier; // 0.01f for Gojo, 1.0f for everyone else
+    float rctCostMultiplier;
 
     // --- Ryomen Sukuna: Reverse Cursed Technique Efficiency ---
     // When true:
@@ -84,10 +85,12 @@ typedef struct {
     float maxCE;                   // 0.0f for Heavenly Restricted
     float baseSpeed;
     float baseAttackDamage;
+    float projectileDamage;
 
     // Domain Expansion
     const char* domainName;        // "None" if unavailable
     bool        hasDomain;         // false for Toji and (lore-balanced) Yuji
+    const char* ultimateName;
 
     // Unique trait bundle — read by combat engine every calculation
     CharacterTraits traits;
