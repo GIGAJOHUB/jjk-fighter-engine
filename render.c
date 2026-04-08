@@ -300,18 +300,15 @@ void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,
 }
 
 void DrawArena(int screenW, int screenH, float floorY) {
-    DrawRectangleGradientV(0, 0, screenW, (int)floorY, (Color){9, 14, 28, 255}, (Color){32, 16, 48, 255});
-    DrawCircleGradient(screenW - 170, 95, 86, (Color){240, 245, 255, 70}, (Color){240, 245, 255, 0});
-
     for (int i = 0; i < 6; i++) {
         int x = 70 + i * 150;
         int h = 120 + (i % 3) * 35;
-        DrawRectangle(x, (int)floorY - h, 38, h, (Color){28, 20, 45, 220});
-        DrawRectangle(x + 4, (int)floorY - h + 8, 30, h - 8, (Color){48, 30, 68, 160});
+        DrawRectangle(x, (int)floorY - h, 38, h, (Color){28, 20, 45, 135});
+        DrawRectangle(x + 4, (int)floorY - h + 8, 30, h - 8, (Color){48, 30, 68, 100});
     }
 
-    DrawRectangle(0, (int)floorY, screenW, screenH - (int)floorY, (Color){20, 14, 32, 255});
-    DrawRectangleGradientV(0, (int)floorY - 48, screenW, 48, (Color){120, 60, 200, 0}, (Color){120, 60, 200, 55});
+    DrawRectangleGradientV(0, (int)floorY, screenW, screenH - (int)floorY, (Color){18, 12, 30, 195}, (Color){10, 8, 18, 235});
+    DrawRectangleGradientV(0, (int)floorY - 48, screenW, 48, (Color){120, 60, 200, 0}, (Color){120, 60, 200, 40});
     DrawRectangle(0, (int)floorY, screenW, 4, (Color){160, 105, 245, 190});
 
     for (int x = 0; x < screenW; x += 40) DrawLine(x, (int)floorY, x, screenH, (Color){255, 255, 255, 10});
@@ -531,47 +528,66 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     int tw = (int)UiMeasure(title, 30.0f, 1.0f).x;
     UiText(title, (Vector2){ (float)(screenW / 2 - tw / 2), 26.0f }, 30.0f, 1.0f, (Color){235, 220, 255, 255});
 
-    int slotW = 150;
-    int slotH = 236;
-    int gap = 16;
-    int total = CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap;
-    int startX = (screenW - total) / 2;
+    int slotW = 206;
+    int slotH = 296;
+    int gap = 24;
+    float stripW = (float)(CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap);
+    float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
+    float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
+    float offset = targetCenter - screenW * 0.5f;
+    float maxOffset = stripW - (float)screenW + 80.0f;
+    if (maxOffset < 0.0f) maxOffset = 0.0f;
+    offset = Clamp(offset, -80.0f, maxOffset);
+    float startX = 60.0f - offset;
+
+    DrawRectangle(0, 82, screenW, 330, (Color){0, 0, 0, 58});
+    DrawLine(0, 412, screenW, 412, (Color){255, 214, 118, 120});
 
     for (int i = 0; i < CHAR_COUNT; i++) {
         CharacterData cd = GetCharacterData((CharacterID)i);
-        int x = startX + i * (slotW + gap);
+        float x = startX + i * (float)(slotW + gap);
         bool p1Here = (p1Cursor == i);
         bool p2Here = (p2Cursor == i);
+        float lift = (p1Here || p2Here) ? -10.0f : 0.0f;
+        Rectangle outer = { x, 102.0f + lift, (float)slotW, (float)slotH };
+        Rectangle portrait = { x + 12.0f, 116.0f + lift, slotW - 24.0f, 156.0f };
 
-        DrawRectangleRounded((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, (Color){24, 16, 40, 220});
-        DrawRectangleRounded((Rectangle){ x + 10, 102, slotW - 20, 110 }, 0.08f, 8, ColorAlpha(cd.bodyColor, 0.85f));
+        if (outer.x + outer.width < -10.0f || outer.x > screenW + 10.0f) continue;
+
+        DrawRectangleRounded(outer, 0.06f, 8, (Color){18, 14, 32, 235});
+        DrawRectangleRounded(portrait, 0.06f, 8, ColorAlpha(cd.bodyColor, 0.85f));
         if (cd.id == CHAR_GOJO && gGojoPortraitLoaded) {
             Rectangle src = {0, 0, (float)gGojoPortrait.width, (float)gGojoPortrait.height};
-            Rectangle dst = {(float)(x + 26), 102.0f, 98.0f, 110.0f};
+            Rectangle dst = {x + 36.0f, 112.0f + lift, 132.0f, 162.0f};
             DrawTexturePro(gGojoPortrait, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
         } else {
-            DrawCircle(x + slotW / 2, 150, 22, ColorAlpha(BLACK, 0.20f));
-            DrawRectangle(x + slotW / 2 - 14, 154, 28, 34, ColorAlpha(BLACK, 0.25f));
+            DrawCircle((int)(x + slotW / 2), (int)(182.0f + lift), 34, ColorAlpha(BLACK, 0.20f));
+            DrawRectangle((int)(x + slotW / 2 - 20), (int)(190.0f + lift), 40, 54, ColorAlpha(BLACK, 0.25f));
         }
 
         Color border = (Color){70, 50, 120, 180};
         if (p1Here && p2Here) border = (Color){255, 220, 70, 255};
         else if (p1Here) border = (Color){90, 160, 255, 255};
         else if (p2Here) border = (Color){255, 90, 90, 255};
-        DrawRectangleRoundedLines((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, border);
+        DrawRectangleRoundedLines(outer, 0.06f, 8, border);
+        DrawRectangleRoundedLines((Rectangle){ outer.x + 6.0f, outer.y + 6.0f, outer.width - 12.0f, outer.height - 12.0f }, 0.06f, 8, ColorAlpha(WHITE, 0.12f));
 
-        int nw = (int)UiMeasure(cd.name, 16.0f, 1.0f).x;
-        UiText(cd.name, (Vector2){ (float)(x + slotW / 2 - nw / 2), 220.0f }, 16.0f, 1.0f, WHITE);
-        int fw = (int)UiMeasure(cd.fullTitle, 9.0f, 1.0f).x;
-        UiText(cd.fullTitle, (Vector2){ (float)(x + slotW / 2 - fw / 2), 242.0f }, 9.0f, 1.0f, (Color){200, 205, 220, 220});
-        int uw = (int)UiMeasure(cd.ultimateName, 9.0f, 1.0f).x;
-        UiText(cd.ultimateName, (Vector2){ (float)(x + slotW / 2 - uw / 2), 258.0f }, 9.0f, 1.0f, ColorAlpha(cd.ceColor, 0.95f));
+        int nw = (int)UiMeasure(cd.name, 18.0f, 1.0f).x;
+        UiText(cd.name, (Vector2){ x + slotW * 0.5f - nw * 0.5f, 286.0f + lift }, 18.0f, 1.0f, WHITE);
+        int fw = (int)UiMeasure(cd.fullTitle, 10.0f, 1.0f).x;
+        UiText(cd.fullTitle, (Vector2){ x + slotW * 0.5f - fw * 0.5f, 314.0f + lift }, 10.0f, 1.0f, (Color){200, 205, 220, 220});
+        int uw = (int)UiMeasure(cd.ultimateName, 10.0f, 1.0f).x;
+        UiText(cd.ultimateName, (Vector2){ x + slotW * 0.5f - uw * 0.5f, 336.0f + lift }, 10.0f, 1.0f, ColorAlpha(cd.ceColor, 0.95f));
+
+        if (p1Here) UiText("P1", (Vector2){ x + 18.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+        if (p2Here) UiText("P2", (Vector2){ x + slotW - 42.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){255, 130, 130, 255});
     }
 
-    UiText("P1: A / D + SPACE", (Vector2){120, (float)(screenH - 64)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});
-    UiText("P2: LEFT / RIGHT + ENTER", (Vector2){620, (float)(screenH - 64)}, 14.0f, 1.0f, (Color){255, 130, 130, 255});
-    if (p1Confirmed) UiText("PLAYER 1 LOCKED", (Vector2){120, (float)(screenH - 38)}, 12.0f, 1.0f, (Color){120, 190, 255, 255});
-    if (p2Confirmed) UiText("PLAYER 2 LOCKED", (Vector2){650, (float)(screenH - 38)}, 12.0f, 1.0f, (Color){255, 130, 130, 255});
+    UiText("P1: A / D + SPACE", (Vector2){70, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});
+    UiText("P2: LEFT / RIGHT + ENTER", (Vector2){548, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){255, 130, 130, 255});
+    UiText("RETRO FIGHTER STRIP SCROLLS WITH YOUR CURSOR", (Vector2){242, (float)(screenH - 44)}, 10.0f, 1.0f, (Color){255, 214, 118, 240});
+    if (p1Confirmed) UiText("PLAYER 1 LOCKED", (Vector2){70, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+    if (p2Confirmed) UiText("PLAYER 2 LOCKED", (Vector2){694, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){255, 130, 130, 255});
 }
 
 void DrawBattleBackground(int screenW, int screenH) {

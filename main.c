@@ -810,11 +810,9 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
     RetroText("FIGHTER GAME ENGINE", (Vector2){ 230, 94 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
 
     DrawPixelPanel((Rectangle){ 240, 154, 480, 264 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
-    RetroText("16-BIT ARCADE FRONTEND", (Vector2){ 280, 178 }, 16.0f, 1.0f, (Color){200, 220, 255, 235});
-    RetroText("Looped theme and animated intro now ship with the game.", (Vector2){ 270, 204 }, 12.0f, 1.0f, (Color){255, 225, 150, 220});
 
     for (int i = 0; i < count; i++) {
-        Rectangle row = { 294, 244 + i * 40.0f, 372, 30 };
+        Rectangle row = { 294, 214 + i * 44.0f, 372, 32 };
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
@@ -824,8 +822,8 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
                   16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
-    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 438 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
-    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 458 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 408 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 428 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
 }
 
 static void DrawAboutScreen(const MenuVideo* video) {
