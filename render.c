@@ -303,16 +303,16 @@ void DrawArena(int screenW, int screenH, float floorY) {
     for (int i = 0; i < 6; i++) {
         int x = 70 + i * 150;
         int h = 120 + (i % 3) * 35;
-        DrawRectangle(x, (int)floorY - h, 38, h, (Color){28, 20, 45, 135});
-        DrawRectangle(x + 4, (int)floorY - h + 8, 30, h - 8, (Color){48, 30, 68, 100});
+        DrawRectangle(x, (int)floorY - h, 24, h, (Color){10, 8, 18, 65});
+        DrawRectangle(x + 3, (int)floorY - h + 10, 18, h - 10, (Color){32, 24, 52, 40});
     }
 
-    DrawRectangleGradientV(0, (int)floorY, screenW, screenH - (int)floorY, (Color){18, 12, 30, 195}, (Color){10, 8, 18, 235});
-    DrawRectangleGradientV(0, (int)floorY - 48, screenW, 48, (Color){120, 60, 200, 0}, (Color){120, 60, 200, 40});
-    DrawRectangle(0, (int)floorY, screenW, 4, (Color){160, 105, 245, 190});
+    DrawRectangleGradientV(0, (int)floorY, screenW, screenH - (int)floorY, (Color){8, 8, 14, 90}, (Color){3, 3, 6, 145});
+    DrawRectangleGradientV(0, (int)floorY - 26, screenW, 26, (Color){255, 255, 255, 0}, (Color){120, 140, 255, 22});
+    DrawRectangle(0, (int)floorY, screenW, 3, (Color){190, 210, 255, 120});
 
-    for (int x = 0; x < screenW; x += 40) DrawLine(x, (int)floorY, x, screenH, (Color){255, 255, 255, 10});
-    for (int y = (int)floorY; y < screenH; y += 28) DrawLine(0, y, screenW, y, (Color){255, 255, 255, 12});
+    for (int x = 0; x < screenW; x += 40) DrawLine(x, (int)floorY, x, screenH, (Color){255, 255, 255, 5});
+    for (int y = (int)floorY; y < screenH; y += 28) DrawLine(0, y, screenW, y, (Color){255, 255, 255, 6});
 }
 
 static void DrawUltimateEffect(Fighter* f) {

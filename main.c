@@ -873,15 +873,15 @@ static void DrawFightVideoBackground(const FightVideo* video, bool domainActive,
         DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, (Color){12, 10, 22, 255}, (Color){25, 16, 36, 255});
     }
 
-    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 70});
+    DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 24});
 
     if (domainActive) {
-        Color tint = (Color){120, 60, 180, 85};
-        if (casterId == CHAR_GOJO) tint = (Color){60, 100, 255, 95};
-        else if (casterId == CHAR_SUKUNA) tint = (Color){255, 50, 60, 90};
-        else if (casterId == CHAR_YUTA) tint = (Color){220, 90, 255, 85};
-        DrawRectangleGradientH(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(tint, 0.10f), tint);
-        DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(BLACK, 0.0f), ColorAlpha(tint, 0.14f));
+        Color tint = (Color){120, 60, 180, 34};
+        if (casterId == CHAR_GOJO) tint = (Color){60, 100, 255, 40};
+        else if (casterId == CHAR_SUKUNA) tint = (Color){255, 50, 60, 38};
+        else if (casterId == CHAR_YUTA) tint = (Color){220, 90, 255, 36};
+        DrawRectangleGradientH(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(tint, 0.04f), tint);
+        DrawRectangleGradientV(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(BLACK, 0.0f), ColorAlpha(tint, 0.06f));
     }
 }
 
@@ -1181,7 +1181,7 @@ int main(void) {
                 Fighter* target = (domainCasterPlayer == 1) ? &p2 : &p1;
                 DrawFightVideoBackground(&fightVideo, true, caster->charData.id);
                 DrawDomainBackground(caster->charData.id, domainTimer, SCREEN_W, SCREEN_H);
-                DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 80});
+                DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 26});
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawFighterBody(&p1, true);
