@@ -37,7 +37,7 @@ When a Domain is cast:
 - a visible counter window begins,
 - and the defender is given a narrow opportunity to respond with their own Domain.
 
-If the defending player has sufficient CE and activates their Domain during the counter window, the game resolves a **Domain Clash**. Both Domains are shattered, the special state collapses, and the fight returns to neutral. If the timer expires first, the sure-hit effect lands and removes **80% of the trapped player's maximum HP**.
+If the defending player has sufficient CE and activates their Domain during the counter window, the game resolves a **Domain Clash**. The clash winner is decided by remaining CE reserve, and the loser takes damage equal to the CE difference. If the timer expires first, the sure-hit effect lands for **150 HP**, or **75 HP** against Toji.
 
 This mechanic gives the engine a dramatic mid-round state swing while still preserving counterplay through meter awareness and timing discipline.
 
@@ -54,7 +54,7 @@ Most importantly, Toji breaks the Domain rule set:
 
 - he is **immune to Domain Expansion stun lock**,
 - he can move freely while an opponent's Domain is active,
-- and the sure-hit penalty is reduced from **80%** of max HP to **50%**.
+- and the sure-hit penalty is reduced from **150 HP** to **75 HP**.
 
 That asymmetry gives the roster a strong systems identity: most characters solve problems with cursed techniques, while Toji wins by violating the cursed-technique economy entirely.
 
@@ -101,6 +101,7 @@ This lets players launch the current packaged version directly without setting u
 | Reversed Cursed Technique (Heal) | `C` | `Numpad 1` |
 | Domain Expansion | `R` | `Numpad 2` |
 | Dodge / Toji Dash | `Q` | `Numpad 3` |
+| Ultimate Ability | `X` | `Numpad 4` |
 
 ### Match Flow
 

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define FLOOR_Y 400.0f
+
 Particle gParticles[MAX_PARTICLES];
 ScreenShake gShake = {0};
 DomainAnnounce gDomainAnnounce = {0};
@@ -315,12 +317,12 @@ static void DrawUltimateEffect(Fighter* f) {
 
         case ULT_BLACK_FLASH:
             DrawRectangleRounded(f->ultHitbox, 0.25f, 8, (Color){25, 25, 25, 210});
-            DrawRectangleRoundedLines(f->ultHitbox, 0.25f, 8, 3.0f, (Color){255, 200, 70, 230});
+            DrawRectangleRoundedLines(f->ultHitbox, 0.25f, 8, (Color){255, 200, 70, 230});
             break;
 
         case ULT_HEAVENLY_ASSAULT:
             DrawRectangleRounded(f->ultHitbox, 0.18f, 8, (Color){210, 210, 220, 180});
-            DrawRectangleRoundedLines(f->ultHitbox, 0.18f, 8, 2.0f, WHITE);
+            DrawRectangleRoundedLines(f->ultHitbox, 0.18f, 8, WHITE);
             break;
 
         case ULT_NONE:
@@ -353,7 +355,7 @@ void DrawFighterBody(Fighter* f, bool isP1) {
 
     DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, f->bodyColor);
     DrawRectangleRounded((Rectangle){ bx + 5.0f, by + 5.0f, bw - 10.0f, bh * 0.38f }, 0.15f, 8, Lighten(f->bodyColor, 45));
-    DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, 2.0f, Lighten(f->bodyColor, 85));
+    DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, Lighten(f->bodyColor, 85));
 
     float eyeX = (f->facingDir > 0) ? bx + bw - 16.0f : bx + 16.0f;
     DrawCircle((int)eyeX, (int)(by + 18.0f), 7, WHITE);
@@ -373,7 +375,7 @@ void DrawFighterBody(Fighter* f, bool isP1) {
 
     if (f->blackFlashActive) {
         DrawRectangleRounded((Rectangle){ bx - 5.0f, by - 5.0f, bw + 10.0f, bh + 10.0f }, 0.16f, 8, (Color){12, 12, 12, 220});
-        DrawRectangleRoundedLines((Rectangle){ bx - 5.0f, by - 5.0f, bw + 10.0f, bh + 10.0f }, 0.16f, 8, 3.0f, (Color){255, 205, 70, 220});
+        DrawRectangleRoundedLines((Rectangle){ bx - 5.0f, by - 5.0f, bw + 10.0f, bh + 10.0f }, 0.16f, 8, (Color){255, 205, 70, 220});
     }
 
     if (f->projectileActive) {
@@ -526,7 +528,7 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
         if (p1Here && p2Here) border = (Color){255, 220, 70, 255};
         else if (p1Here) border = (Color){90, 160, 255, 255};
         else if (p2Here) border = (Color){255, 90, 90, 255};
-        DrawRectangleRoundedLines((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, 2.0f, border);
+        DrawRectangleRoundedLines((Rectangle){ x, 92, slotW, slotH }, 0.08f, 8, border);
 
         int nw = MeasureText(cd.name, 18);
         DrawText(cd.name, x + slotW / 2 - nw / 2, 204, 18, WHITE);
