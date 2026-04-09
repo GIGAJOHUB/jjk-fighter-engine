@@ -5,8 +5,10 @@
 *.app
 *.dll
 !glfw3.dll
+!libenet-7.dll
 !libraylib.dll
 !Urusai_Mania_Portable/glfw3.dll
+!Urusai_Mania_Portable/libenet-7.dll
 !Urusai_Mania_Portable/libraylib.dll
 *.so
 *.dylib

@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "netcode.h"
 #include "render.h"
 #include <math.h>
 #include <stdbool.h>
@@ -29,6 +30,8 @@
 #define YUJI_COMBO_WINDOW        2.2f
 #define MAX_MENU_FRAMES        128
 #define MAX_FIGHT_FRAMES       192
+#define NET_DEFAULT_PORT      7777
+#define NET_IP_MAX_LEN          63
 
 static Font gRetroFont = {0};
 static bool gRetroFontLoaded = false;
@@ -36,6 +39,7 @@ static bool gRetroFontLoaded = false;
 typedef enum {
     STATE_MAIN_MENU = 0,
     STATE_ABOUT,
+    STATE_MULTIPLAYER,
     STATE_CHAR_SELECT,
     STATE_BATTLE,
     STATE_DOMAIN,
@@ -43,6 +47,11 @@ typedef enum {
     STATE_PAUSE,
     STATE_GAME_OVER
 } GameState;
+
+typedef enum {
+    MATCH_MODE_LOCAL = 0,
+    MATCH_MODE_ONLINE
+} MatchMode;
 
 typedef struct {
     int cursor;
@@ -81,6 +90,78 @@ typedef struct {
     GameState pausedFromState;
 } FrontendState;
 
+typedef struct {
+    int cursor;
+    char ipAddress[NET_IP_MAX_LEN + 1];
+    char statusText[128];
+    int port;
+} MultiplayerMenuState;
+
+typedef struct {
+    int cursor;
+    int selected;
+    int confirmed;
+} NetRosterState;
+
+typedef struct {
+    int charId;
+    Rectangle hitbox;
+    float hp;
+    float maxHP;
+    float cursedEnergy;
+    float maxCE;
+    float speed;
+    float attackDamage;
+    int isCrouching;
+    int isStunned;
+    int hasDomain;
+    int domainActive;
+    int isHeavenlyRestricted;
+    int facingDir;
+    float velY;
+    int onGround;
+    int isAttacking;
+    int attackFrames;
+    int attackLanded;
+    int isDodging;
+    int dodgeFrames;
+    float dodgeVelX;
+    int dodgeCooldown;
+    int projectileActive;
+    Rectangle projectile;
+    float projectileSpeed;
+    int blackFlashActive;
+    int blackFlashFrames;
+    int ultUsed;
+    int ultActive;
+    int ultReady;
+    int ultHitApplied;
+    int activeUlt;
+    Rectangle ultHitbox;
+    float ultSpeed;
+    float ultDamage;
+    float ultTimer;
+    float ultDuration;
+    int comboHits;
+    float comboTimer;
+    int copiedUltSource;
+} FighterSnapshot;
+
+typedef struct {
+    int gameState;
+    int domainCasterPlayer;
+    float domainTimer;
+    int clashActive;
+    float clashTimer;
+    float clashDuration;
+    int clashWinnerPlayer;
+    float clashDamage;
+    NetRosterState p1sel;
+    NetRosterState p2sel;
+    FighterSnapshot p1;
+    FighterSnapshot p2;
+} MatchSnapshot;
+
 static Vector2 RetroMeasure(const char* text, float fontSize, float spacing) {
     if (gRetroFontLoaded) return MeasureTextEx(gRetroFont, text, fontSize, spacing);
     return (Vector2){ (float)MeasureText(text, (int)fontSize), fontSize };
@@ -89,6 +170,24 @@ static Vector2 RetroMeasure(const char* text, float fontSize, float spacing) {
 static void RetroText(const char* text, Vector2 pos, float fontSize, float spacing, Color color) {
     if (gRetroFontLoaded) DrawTextEx(gRetroFont, text, pos, fontSize, spacing, color);
     else DrawText(text, (int)pos.x, (int)pos.y, (int)fontSize, color);
+}
+
+static NetInput GatherPlayerOneControls(void) {
+    NetInput input = {0};
+    input.left = IsKeyDown(KEY_A);
+    input.right = IsKeyDown(KEY_D);
+    input.jump = IsKeyDown(KEY_W);
+    input.crouch = IsKeyDown(KEY_LEFT_SHIFT);
+    input.attack = IsKeyDown(KEY_ONE);
+    input.rct = IsKeyDown(KEY_TWO);
+    input.domain = IsKeyDown(KEY_THREE);
+    input.dodge = IsKeyDown(KEY_Q);
+    input.ult = IsKeyDown(KEY_X);
+    return input;
+}
+
+static bool NetInputChanged(const NetInput* a, const NetInput* b) {
+    return memcmp(a, b, sizeof(NetInput)) != 0;
 }
 
 static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
@@ -110,6 +209,157 @@ static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     f.onGround             = true;
     f.copiedUltSource      = CHAR_COUNT;
     return f;
+}
+
+static NetRosterState PackRosterState(const SelectState* sel) {
+    NetRosterState packet = {0};
+    packet.cursor = sel->cursor;
+    packet.selected = (int)sel->selected;
+    packet.confirmed = sel->confirmed ? 1 : 0;
+    return packet;
+}
+
+static void UnpackRosterState(SelectState* sel, const NetRosterState* packet) {
+    sel->cursor = packet->cursor;
+    if (sel->cursor < 0) sel->cursor = 0;
+    if (sel->cursor >= CHAR_COUNT) sel->cursor = CHAR_COUNT - 1;
+    sel->selected = (packet->selected >= 0 && packet->selected < CHAR_COUNT)
+        ? (CharacterID)packet->selected
+        : CHAR_SUKUNA;
+    sel->confirmed = packet->confirmed != 0;
+}
+
+static FighterSnapshot PackFighterSnapshot(const Fighter* f) {
+    FighterSnapshot s = {0};
+    s.charId = (int)f->charData.id;
+    s.hitbox = f->hitbox;
+    s.hp = f->hp;
+    s.maxHP = f->maxHP;
+    s.cursedEnergy = f->cursedEnergy;
+    s.maxCE = f->maxCE;
+    s.speed = f->speed;
+    s.attackDamage = f->attackDamage;
+    s.isCrouching = f->isCrouching;
+    s.isStunned = f->isStunned;
+    s.hasDomain = f->hasDomain;
+    s.domainActive = f->domainActive;
+    s.isHeavenlyRestricted = f->isHeavenlyRestricted;
+    s.facingDir = f->facingDir;
+    s.velY = f->velY;
+    s.onGround = f->onGround;
+    s.isAttacking = f->isAttacking;
+    s.attackFrames = f->attackFrames;
+    s.attackLanded = f->attackLanded;
+    s.isDodging = f->isDodging;
+    s.dodgeFrames = f->dodgeFrames;
+    s.dodgeVelX = f->dodgeVelX;
+    s.dodgeCooldown = f->dodgeCooldown;
+    s.projectileActive = f->projectileActive;
+    s.projectile = f->projectile;
+    s.projectileSpeed = f->projectileSpeed;
+    s.blackFlashActive = f->blackFlashActive;
+    s.blackFlashFrames = f->blackFlashFrames;
+    s.ultUsed = f->ultUsed;
+    s.ultActive = f->ultActive;
+    s.ultReady = f->ultReady;
+    s.ultHitApplied = f->ultHitApplied;
+    s.activeUlt = (int)f->activeUlt;
+    s.ultHitbox = f->ultHitbox;
+    s.ultSpeed = f->ultSpeed;
+    s.ultDamage = f->ultDamage;
+    s.ultTimer = f->ultTimer;
+    s.ultDuration = f->ultDuration;
+    s.comboHits = f->comboHits;
+    s.comboTimer = f->comboTimer;
+    s.copiedUltSource = (int)f->copiedUltSource;
+    return s;
+}
+
+static void UnpackFighterSnapshot(Fighter* f, const FighterSnapshot* s) {
+    CharacterID id = (s->charId >= 0 && s->charId < CHAR_COUNT) ? (CharacterID)s->charId : CHAR_SUKUNA;
+    CharacterData data = GetCharacterData(id);
+    memset(f, 0, sizeof(Fighter));
+    f->charData = data;
+    f->bodyColor = data.bodyColor;
+    f->name = data.name;
+    f->hitbox = s->hitbox;
+    f->hp = s->hp;
+    f->maxHP = s->maxHP;
+    f->cursedEnergy = s->cursedEnergy;
+    f->maxCE = s->maxCE;
+    f->speed = s->speed;
+    f->attackDamage = s->attackDamage;
+    f->isCrouching = s->isCrouching != 0;
+    f->isStunned = s->isStunned != 0;
+    f->hasDomain = s->hasDomain != 0;
+    f->domainActive = s->domainActive != 0;
+    f->isHeavenlyRestricted = s->isHeavenlyRestricted != 0;
+    f->facingDir = s->facingDir;
+    f->velY = s->velY;
+    f->onGround = s->onGround != 0;
+    f->isAttacking = s->isAttacking != 0;
+    f->attackFrames = s->attackFrames;
+    f->attackLanded = s->attackLanded != 0;
+    f->isDodging = s->isDodging != 0;
+    f->dodgeFrames = s->dodgeFrames;
+    f->dodgeVelX = s->dodgeVelX;
+    f->dodgeCooldown = s->dodgeCooldown;
+    f->projectileActive = s->projectileActive != 0;
+    f->projectile = s->projectile;
+    f->projectileSpeed = s->projectileSpeed;
+    f->blackFlashActive = s->blackFlashActive != 0;
+    f->blackFlashFrames = s->blackFlashFrames;
+    f->ultUsed = s->ultUsed != 0;
+    f->ultActive = s->ultActive != 0;
+    f->ultReady = s->ultReady != 0;
+    f->ultHitApplied = s->ultHitApplied != 0;
+    f->activeUlt = (UltimateType)s->activeUlt;
+    f->ultHitbox = s->ultHitbox;
+    f->ultSpeed = s->ultSpeed;
+    f->ultDamage = s->ultDamage;
+    f->ultTimer = s->ultTimer;
+    f->ultDuration = s->ultDuration;
+    f->comboHits = s->comboHits;
+    f->comboTimer = s->comboTimer;
+    f->copiedUltSource = (s->copiedUltSource >= 0 && s->copiedUltSource < CHAR_COUNT)
+        ? (CharacterID)s->copiedUltSource
+        : CHAR_COUNT;
+}
+
+static MatchSnapshot BuildMatchSnapshot(GameState state, int domainCasterPlayer, float domainTimer,
+                                        const DomainClashState* clash, const SelectState* p1sel,
+                                        const SelectState* p2sel, const Fighter* p1, const Fighter* p2) {
+    MatchSnapshot snapshot = {0};
+    snapshot.gameState = (int)state;
+    snapshot.domainCasterPlayer = domainCasterPlayer;
+    snapshot.domainTimer = domainTimer;
+    snapshot.clashActive = clash->active ? 1 : 0;
+    snapshot.clashTimer = clash->timer;
+    snapshot.clashDuration = clash->duration;
+    snapshot.clashWinnerPlayer = clash->winnerPlayer;
+    snapshot.clashDamage = clash->damage;
+    snapshot.p1sel = PackRosterState(p1sel);
+    snapshot.p2sel = PackRosterState(p2sel);
+    snapshot.p1 = PackFighterSnapshot(p1);
+    snapshot.p2 = PackFighterSnapshot(p2);
+    return snapshot;
+}
+
+static void ApplyMatchSnapshot(const MatchSnapshot* snapshot, GameState* state, int* domainCasterPlayer,
+                               float* domainTimer, DomainClashState* clash, SelectState* p1sel,
+                               SelectState* p2sel, Fighter* p1, Fighter* p2) {
+    *state = (GameState)snapshot->gameState;
+    *domainCasterPlayer = snapshot->domainCasterPlayer;
+    *domainTimer = snapshot->domainTimer;
+    clash->active = snapshot->clashActive != 0;
+    clash->timer = snapshot->clashTimer;
+    clash->duration = snapshot->clashDuration;
+    clash->winnerPlayer = snapshot->clashWinnerPlayer;
+    clash->damage = snapshot->clashDamage;
+    UnpackRosterState(p1sel, &snapshot->p1sel);
+    UnpackRosterState(p2sel, &snapshot->p2sel);
+    UnpackFighterSnapshot(p1, &snapshot->p1);
+    UnpackFighterSnapshot(p2, &snapshot->p2);
 }
 
 static void ClampFighter(Fighter* f) {
@@ -757,6 +1007,114 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     }
 }
 
+static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1,
+                                const NetInput* input, const NetInput* prevInput, GameState* state,
+                                int* domainCasterPlayer, float* domainTimer, DomainClashState* clash) {
+    bool actuallyStunned = stunLock && !f->isHeavenlyRestricted;
+    int playerId = isP1 ? 1 : 2;
+    float spd = f->speed;
+    bool pressedDomain = input->domain && !prevInput->domain;
+    bool pressedUlt = input->ult && !prevInput->ult;
+    bool pressedJump = input->jump && !prevInput->jump;
+    bool pressedDodge = input->dodge && !prevInput->dodge;
+    bool pressedAttack = input->attack && !prevInput->attack;
+    bool pressedRCT = input->rct && !prevInput->rct;
+
+    if (f->dodgeCooldown > 0) f->dodgeCooldown--;
+
+    if (pressedDomain) {
+        if (*state == STATE_DOMAIN && *domainCasterPlayer != playerId && *domainTimer > 0.0f) {
+            TriggerDomainClash(f, opponent, isP1, state, domainTimer, clash);
+            return;
+        }
+
+        if (*state == STATE_BATTLE) {
+            CheckDomainLost(f);
+            StartDomain(f, opponent, isP1, state, domainCasterPlayer, domainTimer);
+            if (*state == STATE_DOMAIN) return;
+        }
+    }
+
+    if (*state == STATE_DOMAIN_CLASH) return;
+
+    if (*state == STATE_DOMAIN) {
+        if (f->domainActive) return;
+        if (actuallyStunned) return;
+        if (!f->isHeavenlyRestricted) return;
+    }
+
+    if (actuallyStunned) return;
+
+    if (pressedUlt && *state == STATE_BATTLE) {
+        StartUltimate(f, opponent);
+    }
+
+    f->isCrouching = input->crouch;
+    if (f->isCrouching) {
+        f->hitbox.height = 52.0f;
+        spd *= 0.5f;
+    } else {
+        f->hitbox.height = 90.0f;
+    }
+
+    if (!f->isDodging && !f->ultActive) {
+        if (input->left)  { f->hitbox.x -= spd; f->facingDir = -1; }
+        if (input->right) { f->hitbox.x += spd; f->facingDir =  1; }
+        if (pressedJump && f->onGround) {
+            f->velY = JUMP_FORCE;
+            f->onGround = false;
+        }
+    }
+
+    if (pressedDodge && !f->isDodging && f->dodgeCooldown == 0 && f->onGround && !f->ultActive) {
+        f->isDodging = true;
+        f->dodgeFrames = DODGE_FRAMES;
+        f->dodgeCooldown = DODGE_COOLDOWN_FRAMES;
+        f->dodgeVelX = (float)f->facingDir * DODGE_SPEED;
+        ParticleSpawnBurst(
+            (Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y + f->hitbox.height * 0.5f },
+            8, f->charData.ceColor, 2.5f, 0.2f, 3.0f, PARTICLE_CE_MOTE
+        );
+    }
+
+    if (pressedAttack && !f->isAttacking && !f->ultActive) {
+        bool forceMelee = f->isHeavenlyRestricted || f->charData.id == CHAR_YUJI || HorizontalGap(f, opponent) < 95.0f;
+        f->isAttacking = true;
+        f->attackFrames = 14;
+        f->attackLanded = false;
+
+        if (forceMelee) {
+            DoMeleeHit(f, opponent);
+        } else {
+            float ceCost = CalcCECost(f, CE_ATTACK_COST);
+            if (f->cursedEnergy >= ceCost) {
+                f->cursedEnergy -= ceCost;
+                StartProjectileAttack(f);
+            } else {
+                DoMeleeHit(f, opponent);
+            }
+        }
+    }
+
+    if (f->isAttacking && !f->projectileActive) {
+        DoMeleeHit(f, opponent);
+    }
+
+    if (pressedRCT && !f->isHeavenlyRestricted && !f->ultActive) {
+        float ceCost = CalcRCTCost(f);
+        if (f->cursedEnergy >= ceCost) {
+            float healAmt = RCT_HEAL_AMOUNT * f->charData.traits.rctHealMultiplier;
+            f->cursedEnergy -= ceCost;
+            f->hp += healAmt;
+            ClampFighter(f);
+            ParticleSpawnBurst(
+                (Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y },
+                12, (Color){80, 255, 120, 255}, 1.8f, 0.6f, 4.0f, PARTICLE_REGEN
+            );
+        }
+    }
+}
+
 static bool HasConfirmedRoster(const SelectState* p1sel, const SelectState* p2sel) {
     return p1sel->confirmed && p2sel->confirmed;
 }
@@ -771,6 +1129,72 @@ static void ResetBattleState(Fighter* p1, Fighter* p2, const SelectState* p1sel,
     clash->timer = 0.0f;
     gDomainAnnounce.active = false;
     for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
+}
+
+static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int* domainCasterPlayer,
+                                float* domainTimer, DomainClashState* clash,
+                                const NetInput* p1Input, const NetInput* p1Prev,
+                                const NetInput* p2Input, const NetInput* p2Prev) {
+    float p1Regen = CE_REGEN_RATE * (p1->charData.traits.hasCopy ? 2.0f : 1.0f);
+    float p2Regen = CE_REGEN_RATE * (p2->charData.traits.hasCopy ? 2.0f : 1.0f);
+    if (!clash->active && *state != STATE_DOMAIN) {
+        p1->cursedEnergy += p1Regen;
+        p2->cursedEnergy += p2Regen;
+    }
+    ClampFighter(p1);
+    ClampFighter(p2);
+
+    bool p1Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 2);
+    bool p2Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 1);
+
+    if (p1Input != NULL && p1Prev != NULL && p2Input != NULL && p2Prev != NULL) {
+        ProcessNetworkInput(p1, p2, p1Stun, true, p1Input, p1Prev, state, domainCasterPlayer, domainTimer, clash);
+        ProcessNetworkInput(p2, p1, p2Stun, false, p2Input, p2Prev, state, domainCasterPlayer, domainTimer, clash);
+    } else {
+        ProcessInput(p1, p2, p1Stun, true, state, domainCasterPlayer, domainTimer, clash);
+        ProcessInput(p2, p1, p2Stun, false, state, domainCasterPlayer, domainTimer, clash);
+    }
+
+    ApplyPhysics(p1);
+    ApplyPhysics(p2);
+    UpdateProjectile(p1, p2);
+    UpdateProjectile(p2, p1);
+    UpdateUltimate(p1, p2);
+    UpdateUltimate(p2, p1);
+    UpdateAttackCooldown(p1);
+    UpdateAttackCooldown(p2);
+
+    if (p1->hitbox.x < p2->hitbox.x) {
+        p1->facingDir = 1;
+        p2->facingDir = -1;
+    } else {
+        p1->facingDir = -1;
+        p2->facingDir = 1;
+    }
+
+    if (*state == STATE_DOMAIN) {
+        Fighter* caster = (*domainCasterPlayer == 1) ? p1 : p2;
+        Fighter* target = (*domainCasterPlayer == 1) ? p2 : p1;
+        UpdateDomain(caster, target, state, domainTimer, domainCasterPlayer);
+    } else if (*state == STATE_DOMAIN_CLASH && clash->active) {
+        UpdateDomainClash(state, clash, p1, p2, domainCasterPlayer);
+    }
+
+    CheckDomainLost(p1);
+    CheckDomainLost(p2);
+    DrawFighterEffects(p1);
+    DrawFighterEffects(p2);
+    ClampFighter(p1);
+    ClampFighter(p2);
+
+    if (p1->hp <= 0.0f || p2->hp <= 0.0f) {
+        *state = STATE_GAME_OVER;
+        ParticleSpawnBurst(
+            (Vector2){ SCREEN_W * 0.5f, SCREEN_H * 0.5f },
+            80, GOLD, 6.0f, 1.5f, 5.0f, PARTICLE_SPARK
+        );
+        ShakeTrigger(15.0f, 0.6f);
+    }
 }
 
 static void UpdateMenuVideo(MenuVideo* video) {
@@ -801,18 +1225,18 @@ static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
 }
 
 static void DrawMainMenu(const MenuVideo* video, int cursor) {
-    static const char* items[] = { "PLAY", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
-    int count = 4;
+    static const char* items[] = { "LOCAL", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
+    int count = 5;
     DrawMenuBackground(video);
 
     DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
     RetroText("URUSAI MANIA", (Vector2){ 245, 56 }, 34.0f, 1.0f, (Color){240, 244, 255, 255});
     RetroText("FIGHTER GAME ENGINE", (Vector2){ 230, 94 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
 
-    DrawPixelPanel((Rectangle){ 240, 154, 480, 264 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
+    DrawPixelPanel((Rectangle){ 240, 146, 480, 292 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
 
     for (int i = 0; i < count; i++) {
-        Rectangle row = { 294, 214 + i * 44.0f, 372, 32 };
+        Rectangle row = { 294, 196 + i * 44.0f, 372, 32 };
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
@@ -822,8 +1246,36 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
                   16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
-    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 408 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
-    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 428 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 430 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 450 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+}
+
+static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
+    static const char* items[] = { "HOST LAN MATCH", "JOIN BY IP", "BACK" };
+    DrawMenuBackground(video);
+
+    DrawPixelPanel((Rectangle){ 148, 56, 664, 426 }, (Color){16, 12, 26, 228}, (Color){110, 220, 255, 255});
+    RetroText("MULTIPLAYER DOMAIN", (Vector2){ 240, 82 }, 28.0f, 1.0f, WHITE);
+    RetroText("HOST WAITS ON PORT 7777", (Vector2){ 256, 118 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
+
+    for (int i = 0; i < 3; i++) {
+        Rectangle row = { 238, 176 + i * 46.0f, 484, 32 };
+        bool selected = (i == mpMenu->cursor);
+        DrawRectangleRec(row, selected ? (Color){42, 110, 156, 220} : (Color){34, 28, 52, 205});
+        DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
+        Vector2 size = RetroMeasure(items[i], 15.0f, 1.0f);
+        RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f },
+                  15.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+    }
+
+    DrawPixelPanel((Rectangle){ 218, 338, 524, 84 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
+    RetroText("SERVER IP", (Vector2){ 244, 352 }, 13.0f, 1.0f, (Color){255, 214, 118, 255});
+    DrawRectangleRec((Rectangle){ 244, 374, 472, 24 }, (Color){18, 20, 42, 235});
+    DrawRectangleLinesEx((Rectangle){ 244, 374, 472, 24 }, 2.0f, (Color){120, 185, 255, 255});
+    RetroText(mpMenu->ipAddress, (Vector2){ 256, 380 }, 13.0f, 1.0f, WHITE);
+
+    RetroText(mpMenu->statusText, (Vector2){ 188, 438 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("TYPE IP WHILE JOIN IS HIGHLIGHTED. ENTER TO ACT.", (Vector2){ 182, 460 }, 11.0f, 1.0f, (Color){210, 210, 230, 220});
 }
 
 static void DrawAboutScreen(const MenuVideo* video) {
@@ -853,6 +1305,41 @@ static void DrawPauseMenu(const MenuVideo* video, int cursor) {
                   selected ? WHITE : (Color){215, 215, 230, 240});
     }
     RetroText("ESC RESUMES INSTANTLY", (Vector2){ 356, 336 }, 12.0f, 1.0f, (Color){220, 220, 235, 235});
+}
+
+static void DisconnectMultiplayer(MatchMode* matchMode, MultiplayerMenuState* mpMenu) {
+    NetCleanup();
+    *matchMode = MATCH_MODE_LOCAL;
+    snprintf(mpMenu->statusText, sizeof(mpMenu->statusText), "Connection closed.");
+}
+
+static void SendRosterState(const SelectState* sel) {
+    NetRosterState packet = PackRosterState(sel);
+    NetSendMessage(NET_MSG_SELECT, &packet, sizeof(packet), ENET_PACKET_FLAG_RELIABLE);
+}
+
+static void SendMatchSnapshot(GameState state, int domainCasterPlayer, float domainTimer,
+                              const DomainClashState* clash, const SelectState* p1sel,
+                              const SelectState* p2sel, const Fighter* p1, const Fighter* p2) {
+    MatchSnapshot snapshot = BuildMatchSnapshot(state, domainCasterPlayer, domainTimer, clash, p1sel, p2sel, p1, p2);
+    NetSendMessage(NET_MSG_MATCH_STATE, &snapshot, sizeof(snapshot), ENET_PACKET_FLAG_UNSEQUENCED);
+}
+
+static void UpdateJoinIpInput(MultiplayerMenuState* mpMenu) {
+    int key = GetCharPressed();
+    while (key > 0) {
+        int len = (int)strlen(mpMenu->ipAddress);
+        if (len < NET_IP_MAX_LEN && ((key >= '0' && key <= '9') || key == '.')) {
+            mpMenu->ipAddress[len] = (char)key;
+            mpMenu->ipAddress[len + 1] = '\0';
+        }
+        key = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+        int len = (int)strlen(mpMenu->ipAddress);
+        if (len > 0) mpMenu->ipAddress[len - 1] = '\0';
+    }
 }
 
 static void UpdateFightVideo(FightVideo* video) {
@@ -889,6 +1376,7 @@ int main(void) {
     InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
     SetTargetFPS(60);
     InitAudioDevice();
+    NetInit();
 
     for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
 
@@ -897,12 +1385,17 @@ int main(void) {
     MenuVideo menuVideo = {0};
     FightVideo fightVideo = {0};
     FrontendState frontend = {0};
+    MultiplayerMenuState mpMenu = {0};
     Texture2D gojoPortrait = {0};
     bool gojoPortraitLoaded = false;
     frontend.cursor = 0;
     frontend.pauseCursor = 0;
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
+    mpMenu.cursor = 0;
+    mpMenu.port = NET_DEFAULT_PORT;
+    snprintf(mpMenu.ipAddress, sizeof(mpMenu.ipAddress), "127.0.0.1");
+    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Host a match or enter a LAN IP to join.");
 
     FilePathList menuPaths = LoadDirectoryFilesEx("assets/menu_frames", ".png", false);
     if (menuPaths.count > 0) {
@@ -946,6 +1439,7 @@ int main(void) {
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
 
     GameState state = STATE_MAIN_MENU;
+    MatchMode matchMode = MATCH_MODE_LOCAL;
     SelectState p1sel = { 0, CHAR_SUKUNA, false };
     SelectState p2sel = { 4, CHAR_YUJI, false };
     p1sel.selected = CHAR_SUKUNA;
@@ -958,6 +1452,12 @@ int main(void) {
     int domainCasterPlayer = 0;
     float domainTimer = 0.0f;
     DomainClashState clash = {0};
+    NetInput hostInput = {0};
+    NetInput hostPrevInput = {0};
+    NetInput clientInput = {0};
+    NetInput clientPrevInput = {0};
+    NetInput localNetInput = {0};
+    NetInput localNetPrevInput = {0};
 
     while (!WindowShouldClose()) {
         if (musicLoaded) {
@@ -968,7 +1468,7 @@ int main(void) {
             }
         }
 
-        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_PAUSE) {
+        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_MULTIPLAYER || state == STATE_PAUSE) {
             UpdateMenuVideo(&menuVideo);
         }
         if (state == STATE_BATTLE || state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) {
@@ -979,14 +1479,38 @@ int main(void) {
         ParticleUpdate();
         AnnounceUpdate();
 
+        if (matchMode == MATCH_MODE_ONLINE || state == STATE_MULTIPLAYER) {
+            unsigned char netBuffer[sizeof(MatchSnapshot)] = {0};
+            NetMessageType msgType = NET_MSG_NONE;
+            size_t payloadSize = 0;
+            while (NetPollMessage(&msgType, netBuffer, sizeof(netBuffer), &payloadSize)) {
+                if (msgType == NET_MSG_SELECT && payloadSize == sizeof(NetRosterState) && gNetRole == NET_ROLE_HOST) {
+                    UnpackRosterState(&p2sel, (const NetRosterState*)netBuffer);
+                } else if (msgType == NET_MSG_INPUT && payloadSize == sizeof(NetInput) && gNetRole == NET_ROLE_HOST) {
+                    memcpy(&clientInput, netBuffer, sizeof(NetInput));
+                } else if (msgType == NET_MSG_MATCH_STATE && payloadSize == sizeof(MatchSnapshot) && gNetRole == NET_ROLE_CLIENT) {
+                    ApplyMatchSnapshot((const MatchSnapshot*)netBuffer, &state, &domainCasterPlayer, &domainTimer,
+                                       &clash, &p1sel, &p2sel, &p1, &p2);
+                }
+            }
+
+            if (!gNetConnected && gNetRole != NET_ROLE_NONE && state != STATE_MULTIPLAYER) {
+                DisconnectMultiplayer(&matchMode, &mpMenu);
+                p1sel.confirmed = false;
+                p2sel.confirmed = false;
+                state = STATE_MAIN_MENU;
+            }
+        }
+
         switch (state) {
             case STATE_MAIN_MENU: {
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 4;
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 3) % 4;
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 5;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 4) % 5;
 
                 if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
                     switch (frontend.cursor) {
                         case 0:
+                            matchMode = MATCH_MODE_LOCAL;
                             if (HasConfirmedRoster(&p1sel, &p2sel)) {
                                 ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
                                 state = STATE_BATTLE;
@@ -996,13 +1520,26 @@ int main(void) {
                             }
                             break;
                         case 1:
+                            if (gNetRole != NET_ROLE_NONE || gNetConnected) {
+                                DisconnectMultiplayer(&matchMode, &mpMenu);
+                                NetInit();
+                            }
+                            matchMode = MATCH_MODE_ONLINE;
+                            p1sel.confirmed = false;
+                            p2sel.confirmed = false;
+                            mpMenu.cursor = 0;
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Host a match or enter a LAN IP to join.");
+                            state = STATE_MULTIPLAYER;
+                            break;
+                        case 2:
+                            matchMode = MATCH_MODE_LOCAL;
                             frontend.launchBattleAfterSelect = false;
                             state = STATE_CHAR_SELECT;
                             break;
-                        case 2:
+                        case 3:
                             state = STATE_ABOUT;
                             break;
-                        case 3:
+                        case 4:
                             CloseWindow();
                             break;
                     }
@@ -1016,31 +1553,117 @@ int main(void) {
                 }
                 break;
 
+            case STATE_MULTIPLAYER:
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    DisconnectMultiplayer(&matchMode, &mpMenu);
+                    NetInit();
+                    state = STATE_MAIN_MENU;
+                    break;
+                }
+
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 3;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 2) % 3;
+                if (mpMenu.cursor == 1) UpdateJoinIpInput(&mpMenu);
+
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                    if (mpMenu.cursor == 0) {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                        matchMode = MATCH_MODE_ONLINE;
+                        if (NetHostCreate(mpMenu.port)) {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Hosting on port %d. Waiting for challenger...", mpMenu.port);
+                        } else {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Could not host the server.");
+                        }
+                    } else if (mpMenu.cursor == 1) {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                        matchMode = MATCH_MODE_ONLINE;
+                        if (NetClientConnect(mpMenu.ipAddress, mpMenu.port)) {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to %s:%d...", mpMenu.ipAddress, mpMenu.port);
+                        } else {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connection attempt failed.");
+                        }
+                    } else {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                        state = STATE_MAIN_MENU;
+                    }
+                }
+
+                if (gNetConnected) {
+                    p1sel.cursor = 0;
+                    p1sel.selected = CHAR_SUKUNA;
+                    p1sel.confirmed = false;
+                    p2sel.cursor = 4;
+                    p2sel.selected = CHAR_YUJI;
+                    p2sel.confirmed = false;
+                    memset(&hostInput, 0, sizeof(hostInput));
+                    memset(&hostPrevInput, 0, sizeof(hostPrevInput));
+                    memset(&clientInput, 0, sizeof(clientInput));
+                    memset(&clientPrevInput, 0, sizeof(clientPrevInput));
+                    memset(&localNetInput, 0, sizeof(localNetInput));
+                    memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
+                    frontend.launchBattleAfterSelect = true;
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connection established. Choose your sorcerer.");
+                    state = STATE_CHAR_SELECT;
+                }
+                break;
+
             case STATE_CHAR_SELECT:
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     p1sel.confirmed = false;
                     p2sel.confirmed = false;
+                    if (matchMode == MATCH_MODE_ONLINE) {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                    }
                     state = STATE_MAIN_MENU;
                     break;
                 }
-                if (IsKeyPressed(KEY_A) && p1sel.cursor > 0) p1sel.cursor--;
-                if (IsKeyPressed(KEY_D) && p1sel.cursor < CHAR_COUNT - 1) p1sel.cursor++;
-                if (IsKeyPressed(KEY_SPACE) && !p1sel.confirmed) {
-                    p1sel.selected = (CharacterID)p1sel.cursor;
-                    p1sel.confirmed = true;
-                }
-                if (IsKeyPressed(KEY_LEFT) && p2sel.cursor > 0) p2sel.cursor--;
-                if (IsKeyPressed(KEY_RIGHT) && p2sel.cursor < CHAR_COUNT - 1) p2sel.cursor++;
-                if (IsKeyPressed(KEY_ENTER) && !p2sel.confirmed) {
-                    p2sel.selected = (CharacterID)p2sel.cursor;
-                    p2sel.confirmed = true;
-                }
-                if (p1sel.confirmed && p2sel.confirmed) {
-                    if (frontend.launchBattleAfterSelect) {
-                        ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
-                        state = STATE_BATTLE;
-                    } else {
-                        state = STATE_MAIN_MENU;
+                if (matchMode == MATCH_MODE_ONLINE) {
+                    bool isHost = (gNetRole == NET_ROLE_HOST);
+                    SelectState* localSel = isHost ? &p1sel : &p2sel;
+                    NetRosterState beforeSend = PackRosterState(localSel);
+                    if (IsKeyPressed(KEY_A) && localSel->cursor > 0 && !localSel->confirmed) localSel->cursor--;
+                    if (IsKeyPressed(KEY_D) && localSel->cursor < CHAR_COUNT - 1 && !localSel->confirmed) localSel->cursor++;
+                    if (IsKeyPressed(KEY_SPACE) && !localSel->confirmed) {
+                        localSel->selected = (CharacterID)localSel->cursor;
+                        localSel->confirmed = true;
+                    }
+                    if (localSel->confirmed) localSel->selected = (CharacterID)localSel->cursor;
+                    NetRosterState afterSend = PackRosterState(localSel);
+                    if (memcmp(&beforeSend, &afterSend, sizeof(NetRosterState)) != 0) {
+                        SendRosterState(localSel);
+                    }
+
+                    if (isHost) {
+                        if (p1sel.confirmed && p2sel.confirmed) {
+                            ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                            state = STATE_BATTLE;
+                        }
+                        SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
+                    }
+                } else {
+                    if (IsKeyPressed(KEY_A) && p1sel.cursor > 0) p1sel.cursor--;
+                    if (IsKeyPressed(KEY_D) && p1sel.cursor < CHAR_COUNT - 1) p1sel.cursor++;
+                    if (IsKeyPressed(KEY_SPACE) && !p1sel.confirmed) {
+                        p1sel.selected = (CharacterID)p1sel.cursor;
+                        p1sel.confirmed = true;
+                    }
+                    if (IsKeyPressed(KEY_LEFT) && p2sel.cursor > 0) p2sel.cursor--;
+                    if (IsKeyPressed(KEY_RIGHT) && p2sel.cursor < CHAR_COUNT - 1) p2sel.cursor++;
+                    if (IsKeyPressed(KEY_ENTER) && !p2sel.confirmed) {
+                        p2sel.selected = (CharacterID)p2sel.cursor;
+                        p2sel.confirmed = true;
+                    }
+                    if (p1sel.confirmed && p2sel.confirmed) {
+                        if (frontend.launchBattleAfterSelect) {
+                            ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                            state = STATE_BATTLE;
+                        } else {
+                            state = STATE_MAIN_MENU;
+                        }
                     }
                 }
                 break;
@@ -1049,65 +1672,35 @@ int main(void) {
             case STATE_DOMAIN:
             case STATE_DOMAIN_CLASH: {
                 if (IsKeyPressed(KEY_ESCAPE)) {
-                    frontend.pausedFromState = state;
-                    frontend.pauseCursor = 0;
-                    state = STATE_PAUSE;
+                    if (matchMode == MATCH_MODE_ONLINE) {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                        p1sel.confirmed = false;
+                        p2sel.confirmed = false;
+                        state = STATE_MAIN_MENU;
+                    } else {
+                        frontend.pausedFromState = state;
+                        frontend.pauseCursor = 0;
+                        state = STATE_PAUSE;
+                    }
                     break;
                 }
-                float p1Regen = CE_REGEN_RATE * (p1.charData.traits.hasCopy ? 2.0f : 1.0f);
-                float p2Regen = CE_REGEN_RATE * (p2.charData.traits.hasCopy ? 2.0f : 1.0f);
-                if (!clash.active && state != STATE_DOMAIN) {
-                    p1.cursedEnergy += p1Regen;
-                    p2.cursedEnergy += p2Regen;
-                }
-                ClampFighter(&p1);
-                ClampFighter(&p2);
-
-                bool p1Stun = (state == STATE_DOMAIN && domainCasterPlayer == 2);
-                bool p2Stun = (state == STATE_DOMAIN && domainCasterPlayer == 1);
-
-                ProcessInput(&p1, &p2, p1Stun, true, &state, &domainCasterPlayer, &domainTimer, &clash);
-                ProcessInput(&p2, &p1, p2Stun, false, &state, &domainCasterPlayer, &domainTimer, &clash);
-
-                ApplyPhysics(&p1);
-                ApplyPhysics(&p2);
-                UpdateProjectile(&p1, &p2);
-                UpdateProjectile(&p2, &p1);
-                UpdateUltimate(&p1, &p2);
-                UpdateUltimate(&p2, &p1);
-                UpdateAttackCooldown(&p1);
-                UpdateAttackCooldown(&p2);
-
-                if (p1.hitbox.x < p2.hitbox.x) {
-                    p1.facingDir = 1;
-                    p2.facingDir = -1;
+                if (matchMode == MATCH_MODE_ONLINE) {
+                    localNetInput = GatherPlayerOneControls();
+                    if (gNetRole == NET_ROLE_HOST) {
+                        hostInput = localNetInput;
+                        SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
+                                            &hostInput, &hostPrevInput, &clientInput, &clientPrevInput);
+                        SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
+                        hostPrevInput = hostInput;
+                        clientPrevInput = clientInput;
+                    } else if (gNetRole == NET_ROLE_CLIENT) {
+                        NetSendInput(localNetInput);
+                        localNetPrevInput = localNetInput;
+                    }
                 } else {
-                    p1.facingDir = -1;
-                    p2.facingDir = 1;
-                }
-
-                if (state == STATE_DOMAIN) {
-                    Fighter* caster = (domainCasterPlayer == 1) ? &p1 : &p2;
-                    Fighter* target = (domainCasterPlayer == 1) ? &p2 : &p1;
-                    UpdateDomain(caster, target, &state, &domainTimer, &domainCasterPlayer);
-                } else if (state == STATE_DOMAIN_CLASH && clash.active) {
-                    UpdateDomainClash(&state, &clash, &p1, &p2, &domainCasterPlayer);
-                }
-
-                CheckDomainLost(&p1);
-                CheckDomainLost(&p2);
-                DrawFighterEffects(&p1);
-                DrawFighterEffects(&p2);
-                ClampFighter(&p1);
-                ClampFighter(&p2);
-
-                if (p1.hp <= 0.0f || p2.hp <= 0.0f) {
-                    state = STATE_GAME_OVER;
-                    ParticleSpawnBurst(
-                        (Vector2){ SCREEN_W * 0.5f, SCREEN_H * 0.5f },
-                        80, GOLD, 6.0f, 1.5f, 5.0f, PARTICLE_SPARK
-                    );
-                    ShakeTrigger(15.0f, 0.6f);
+                    SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
+                                        NULL, NULL, NULL, NULL);
                 }
                 break;
             }
@@ -1125,10 +1718,12 @@ int main(void) {
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
                         frontend.launchBattleAfterSelect = false;
+                        matchMode = MATCH_MODE_LOCAL;
                         state = STATE_CHAR_SELECT;
                     } else if (frontend.pauseCursor == 2) {
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
+                        matchMode = MATCH_MODE_LOCAL;
                         state = STATE_MAIN_MENU;
                     } else {
                         CloseWindow();
@@ -1137,14 +1732,26 @@ int main(void) {
                 break;
             case STATE_GAME_OVER:
                 if (IsKeyPressed(KEY_ESCAPE)) {
+                    if (matchMode == MATCH_MODE_ONLINE) {
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                    }
                     state = STATE_MAIN_MENU;
                     p1sel.confirmed = false;
                     p2sel.confirmed = false;
                     break;
                 }
                 if (IsKeyPressed(KEY_ENTER)) {
-                    ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
-                    state = STATE_BATTLE;
+                    if (matchMode == MATCH_MODE_ONLINE) {
+                        if (gNetRole == NET_ROLE_HOST) {
+                            ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                            state = STATE_BATTLE;
+                            SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
+                        }
+                    } else {
+                        ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                        state = STATE_BATTLE;
+                    }
                 }
                 break;
         }
@@ -1158,6 +1765,10 @@ int main(void) {
 
             case STATE_ABOUT:
                 DrawAboutScreen(&menuVideo);
+                break;
+
+            case STATE_MULTIPLAYER:
+                DrawMultiplayerMenu(&menuVideo, &mpMenu);
                 break;
 
             case STATE_CHAR_SELECT:
@@ -1237,6 +1848,7 @@ int main(void) {
     for (int i = 0; i < fightVideo.count; i++) {
         if (IsTextureValid(fightVideo.frames[i])) UnloadTexture(fightVideo.frames[i]);
     }
+    NetCleanup();
     CloseAudioDevice();
     CloseWindow();
     return 0;
