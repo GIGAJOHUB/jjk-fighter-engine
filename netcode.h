@@ -22,6 +22,7 @@
 #define NET_USERNAME_LEN 24
 #define NET_STATUS_TEXT_LEN 96
 #define NET_HOST_IP_LEN 64
+#define NET_MAX_LOBBY_PLAYERS 32
 
 // This is the tiny packet we send over the Wi-Fi 60 times a second
 typedef struct {
@@ -48,7 +49,8 @@ typedef enum {
     NET_MSG_LOBBY_CHALLENGE_RESPONSE,
     NET_MSG_LOBBY_QUEUE_JOIN,
     NET_MSG_LOBBY_QUEUE_STATUS,
-    NET_MSG_LOBBY_MATCH_FOUND
+    NET_MSG_LOBBY_MATCH_FOUND,
+    NET_MSG_LOBBY_PLAYER_LIST
 } NetMessageType;
 
 typedef enum {
@@ -93,6 +95,17 @@ typedef struct {
     char opponentUsername[NET_USERNAME_LEN];
     char hostIp[NET_HOST_IP_LEN];
 } LobbyMatchFoundMessage;
+
+typedef struct {
+    char username[NET_USERNAME_LEN];
+    int available;
+    int queued;
+} LobbyPlayerEntry;
+
+typedef struct {
+    int count;
+    LobbyPlayerEntry players[NET_MAX_LOBBY_PLAYERS];
+} LobbyPlayerListMessage;
 
 // Core API
 bool NetInit(void);

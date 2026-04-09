@@ -33,6 +33,8 @@
 #define NET_GAME_PORT         7777
 #define NET_LOBBY_PORT        8999
 #define NET_LOBBY_SERVER_IP   "127.0.0.1"
+#define PROFILE_PATH          "player_profile.txt"
+#define ONLINE_RESULT_TIME      3.2f
 
 static Font gRetroFont = {0};
 static bool gRetroFontLoaded = false;
@@ -95,6 +97,9 @@ typedef struct {
     int pauseCursor;
     bool launchBattleAfterSelect;
     GameState pausedFromState;
+    bool editingUsername;
+    float onlineResultTimer;
+    char onlineResultText[96];
 } FrontendState;
 
 typedef struct {
@@ -113,6 +118,8 @@ typedef struct {
     char pendingOpponent[NET_USERNAME_LEN];
     NetRole pendingMatchRole;
     int pendingAction;
+    int playerListCursor;
+    LobbyPlayerListMessage playerList;
 } MultiplayerMenuState;
 
 typedef struct {
@@ -206,6 +213,37 @@ static NetInput GatherPlayerOneControls(void) {
 
 static bool NetInputChanged(const NetInput* a, const NetInput* b) {
     return memcmp(a, b, sizeof(NetInput)) != 0;
+}
+
+static void LoadSavedUsername(char* buffer, int bufferSize) {
+    FILE* file = fopen(PROFILE_PATH, "rb");
+    if (file == NULL) {
+        snprintf(buffer, bufferSize, "player");
+        return;
+    }
+
+    if (fgets(buffer, bufferSize, file) == NULL) {
+        snprintf(buffer, bufferSize, "player");
+    } else {
+        size_t len = strcspn(buffer, "\r\n");
+        buffer[len] = '\0';
+        if (buffer[0] == '\0') snprintf(buffer, bufferSize, "player");
+    }
+    fclose(file);
+}
+
+static void SaveUsername(const char* username) {
+    FILE* file = fopen(PROFILE_PATH, "wb");
+    if (file == NULL) return;
+    fputs(username, file);
+    fputc('\n', file);
+    fclose(file);
+}
+
+static void SetOnlineResult(FrontendState* frontend, const char* username, bool won) {
+    snprintf(frontend->onlineResultText, sizeof(frontend->onlineResultText),
+             won ? "%s: Nah I'd WIN" : "%s: NAH, I'd FRAUD", username);
+    frontend->onlineResultTimer = ONLINE_RESULT_TIME;
 }
 
 static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
@@ -1242,7 +1280,7 @@ static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
     DrawRectangleLinesEx((Rectangle){ panel.x + 6, panel.y + 6, panel.width - 12, panel.height - 12 }, 1.0f, ColorAlpha(WHITE, 0.18f));
 }
 
-static void DrawMainMenu(const MenuVideo* video, int cursor) {
+static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool editingUsername) {
     static const char* items[] = { "LOCAL", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
     int count = 5;
     DrawMenuBackground(video);
@@ -1250,6 +1288,15 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
     DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
     RetroText("URUSAI MANIA", (Vector2){ 245, 56 }, 34.0f, 1.0f, (Color){240, 244, 255, 255});
     RetroText("FIGHTER GAME ENGINE", (Vector2){ 230, 94 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
+    DrawPixelPanel((Rectangle){ 690, 46, 180, 54 }, (Color){12, 18, 30, 220}, (Color){120, 220, 255, 255});
+    if (editingUsername) {
+        RetroText("PLAYER ID", (Vector2){ 718, 56 }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
+        RetroText(username, (Vector2){ 714, 74 }, 12.0f, 1.0f, WHITE);
+    } else {
+        char greet[96];
+        snprintf(greet, sizeof(greet), "HI %s!", username);
+        RetroText(greet, (Vector2){ 712, 64 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
+    }
 
     DrawPixelPanel((Rectangle){ 240, 146, 480, 292 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
 
@@ -1264,6 +1311,7 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
                   16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
+    RetroText("TAB TO EDIT PLAYER ID", (Vector2){ 96, 430 }, 12.0f, 1.0f, (Color){120, 220, 255, 240});
     RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 430 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
     RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 450 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
 }
@@ -1297,6 +1345,21 @@ static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuSta
     DrawPixelPanel((Rectangle){ 192, 386, 576, 72 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
     RetroText(mpMenu->statusText, (Vector2){ 212, 404 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
     RetroText("SERVER: URUSAI LOBBY", (Vector2){ 212, 428 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
+
+    DrawPixelPanel((Rectangle){ 760, 112, 168, 250 }, (Color){12, 16, 32, 220}, (Color){120, 220, 255, 220});
+    RetroText("WAITING PLAYERS", (Vector2){ 776, 128 }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
+    if (mpMenu->playerList.count == 0) {
+        RetroText("No players", (Vector2){ 798, 176 }, 11.0f, 1.0f, (Color){220, 230, 255, 220});
+    } else {
+        for (int i = 0; i < mpMenu->playerList.count && i < 8; i++) {
+            const LobbyPlayerEntry* entry = &mpMenu->playerList.players[i];
+            Rectangle row = { 772, 154.0f + i * 24.0f, 144, 20 };
+            bool selected = (i == mpMenu->playerListCursor);
+            DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){22, 28, 44, 205});
+            DrawRectangleLinesEx(row, 1.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 180});
+            RetroText(entry->username, (Vector2){ row.x + 6, row.y + 4 }, 10.0f, 1.0f, WHITE);
+        }
+    }
 
     if (mpMenu->hasIncomingChallenge) {
         DrawPixelPanel((Rectangle){ 244, 252, 472, 88 }, (Color){24, 18, 36, 240}, (Color){255, 96, 96, 255});
@@ -1339,6 +1402,13 @@ static void DrawPauseMenu(const MenuVideo* video, int cursor) {
 static void DisconnectMultiplayer(MatchMode* matchMode, MultiplayerMenuState* mpMenu) {
     NetCleanup();
     *matchMode = MATCH_MODE_LOCAL;
+    mpMenu->connectedToLobby = false;
+    mpMenu->registered = false;
+    mpMenu->waitingForMatch = false;
+    mpMenu->hasIncomingChallenge = false;
+    mpMenu->connectingToMatch = false;
+    mpMenu->pendingOpponent[0] = '\0';
+    mpMenu->pendingHostIp[0] = '\0';
     snprintf(mpMenu->statusText, sizeof(mpMenu->statusText), "Connection closed.");
 }
 
@@ -1428,9 +1498,10 @@ int main(int argc, char** argv) {
     frontend.pauseCursor = 0;
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
+    frontend.editingUsername = false;
     mpMenu.cursor = 0;
     mpMenu.activeField = 0;
-    snprintf(mpMenu.username, sizeof(mpMenu.username), "player");
+    LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
     mpMenu.targetUsername[0] = '\0';
     mpMenu.incomingChallenge[0] = '\0';
     mpMenu.pendingHostIp[0] = '\0';
@@ -1523,7 +1594,7 @@ int main(int argc, char** argv) {
         AnnounceUpdate();
 
         if (matchMode == MATCH_MODE_ONLINE || state == STATE_MULTIPLAYER) {
-            unsigned char netBuffer[sizeof(MatchSnapshot)] = {0};
+            unsigned char netBuffer[2048] = {0};
             NetMessageType msgType = NET_MSG_NONE;
             size_t payloadSize = 0;
             while (NetPollMessage(&msgType, netBuffer, sizeof(netBuffer), &payloadSize)) {
@@ -1536,8 +1607,10 @@ int main(int argc, char** argv) {
                             LobbyChallengeRequestMessage challenge = {0};
                             snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
                             NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                        } else if (result->success && mpMenu.pendingAction == MP_ACTION_QUEUE) {
-                            NetSendMessage(NET_MSG_LOBBY_QUEUE_JOIN, NULL, 0, ENET_PACKET_FLAG_RELIABLE);
+                        } else if (result->success && mpMenu.pendingAction == MP_ACTION_QUEUE && mpMenu.targetUsername[0] != '\0') {
+                            LobbyChallengeRequestMessage challenge = {0};
+                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
+                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
                         }
                         mpMenu.pendingAction = MP_ACTION_NONE;
                     } else if (msgType == NET_MSG_LOBBY_CHALLENGE_NOTIFY && payloadSize == sizeof(LobbyChallengeNotifyMessage)) {
@@ -1549,6 +1622,14 @@ int main(int argc, char** argv) {
                         const LobbyQueueStatusMessage* status = (const LobbyQueueStatusMessage*)netBuffer;
                         mpMenu.waitingForMatch = status->queued != 0;
                         snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", status->message);
+                    } else if (msgType == NET_MSG_LOBBY_PLAYER_LIST && payloadSize == sizeof(LobbyPlayerListMessage)) {
+                        memcpy(&mpMenu.playerList, netBuffer, sizeof(LobbyPlayerListMessage));
+                        if (mpMenu.playerList.count > 0) {
+                            if (mpMenu.playerListCursor >= mpMenu.playerList.count) mpMenu.playerListCursor = mpMenu.playerList.count - 1;
+                            if (mpMenu.playerListCursor < 0) mpMenu.playerListCursor = 0;
+                        } else {
+                            mpMenu.playerListCursor = 0;
+                        }
                     } else if (msgType == NET_MSG_LOBBY_MATCH_FOUND && payloadSize == sizeof(LobbyMatchFoundMessage)) {
                         const LobbyMatchFoundMessage* found = (const LobbyMatchFoundMessage*)netBuffer;
                         mpMenu.connectingToMatch = true;
@@ -1606,6 +1687,20 @@ int main(int argc, char** argv) {
 
         switch (state) {
             case STATE_MAIN_MENU: {
+                if (IsKeyPressed(KEY_TAB)) {
+                    frontend.editingUsername = !frontend.editingUsername;
+                    if (!frontend.editingUsername) SaveUsername(mpMenu.username);
+                }
+
+                if (frontend.editingUsername) {
+                    UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
+                    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                        frontend.editingUsername = false;
+                        SaveUsername(mpMenu.username);
+                    }
+                    break;
+                }
+
                 if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 5;
                 if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 4) % 5;
 
@@ -1676,6 +1771,10 @@ int main(int argc, char** argv) {
 
                 if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 5;
                 if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 4) % 5;
+                if (mpMenu.cursor == 3 && mpMenu.playerList.count > 0) {
+                    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) mpMenu.playerListCursor = (mpMenu.playerListCursor + mpMenu.playerList.count - 1) % mpMenu.playerList.count;
+                    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) mpMenu.playerListCursor = (mpMenu.playerListCursor + 1) % mpMenu.playerList.count;
+                }
 
                 if (mpMenu.cursor == 0) UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
                 if (mpMenu.cursor == 1) UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
@@ -1720,14 +1819,21 @@ int main(int argc, char** argv) {
                     } else if (mpMenu.cursor == 3) {
                         if (mpMenu.username[0] == '\0') {
                             snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter your username first.");
+                        } else if (mpMenu.playerList.count == 0) {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "No waiting global players right now.");
                         } else {
+                            const LobbyPlayerEntry* target = &mpMenu.playerList.players[mpMenu.playerListCursor];
                             LobbyRegisterMessage reg = {0};
                             snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
+                            snprintf(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), "%s", target->username);
                             if (!mpMenu.registered) {
                                 mpMenu.pendingAction = MP_ACTION_QUEUE;
                                 NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
                             } else {
-                                NetSendMessage(NET_MSG_LOBBY_QUEUE_JOIN, NULL, 0, ENET_PACKET_FLAG_RELIABLE);
+                                LobbyChallengeRequestMessage challenge = {0};
+                                snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", target->username);
+                                NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending global match request to %s...", target->username);
                             }
                         }
                     } else if (mpMenu.cursor == 4) {
@@ -1850,6 +1956,11 @@ int main(int argc, char** argv) {
                     SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
                                         NULL, NULL, NULL, NULL);
                 }
+                if (matchMode == MATCH_MODE_ONLINE && state == STATE_GAME_OVER && frontend.onlineResultTimer <= 0.0f) {
+                    bool p1Won = (p2.hp <= 0.0f);
+                    bool localWon = (gNetRole == NET_ROLE_HOST) ? p1Won : !p1Won;
+                    SetOnlineResult(&frontend, mpMenu.username, localWon);
+                }
                 break;
             }
             case STATE_PAUSE:
@@ -1879,6 +1990,18 @@ int main(int argc, char** argv) {
                 }
                 break;
             case STATE_GAME_OVER:
+                if (matchMode == MATCH_MODE_ONLINE && frontend.onlineResultTimer > 0.0f) {
+                    frontend.onlineResultTimer -= GetFrameTime();
+                    if (frontend.onlineResultTimer <= 0.0f) {
+                        frontend.onlineResultTimer = 0.0f;
+                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        NetInit();
+                        p1sel.confirmed = false;
+                        p2sel.confirmed = false;
+                        state = STATE_MAIN_MENU;
+                        break;
+                    }
+                }
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     if (matchMode == MATCH_MODE_ONLINE) {
                         DisconnectMultiplayer(&matchMode, &mpMenu);
@@ -1908,7 +2031,7 @@ int main(int argc, char** argv) {
 
         switch (state) {
             case STATE_MAIN_MENU:
-                DrawMainMenu(&menuVideo, frontend.cursor);
+                DrawMainMenu(&menuVideo, frontend.cursor, mpMenu.username, frontend.editingUsername);
                 break;
 
             case STATE_ABOUT:
@@ -1971,7 +2094,9 @@ int main(int argc, char** argv) {
                 break;
 
             case STATE_GAME_OVER: {
-                const char* winTxt = (p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!";
+                const char* winTxt = (matchMode == MATCH_MODE_ONLINE && frontend.onlineResultText[0] != '\0')
+                    ? frontend.onlineResultText
+                    : ((p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!");
                 Color winCol = (p2.hp <= 0.0f) ? p1.charData.bodyColor : p2.charData.bodyColor;
                 DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);

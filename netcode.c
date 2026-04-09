@@ -289,6 +289,24 @@ static void TryMatchQueuedPlayers(LobbyClient* clients, int maxClients) {
     }
 }
 
+static void BroadcastLobbyPlayerList(ENetHost* server, LobbyClient* clients, int maxClients) {
+    (void)server;
+    LobbyPlayerListMessage list = {0};
+    for (int i = 0; i < maxClients && list.count < NET_MAX_LOBBY_PLAYERS; i++) {
+        if (clients[i].peer == NULL || clients[i].username[0] == '\0') continue;
+        LobbyPlayerEntry* entry = &list.players[list.count++];
+        snprintf(entry->username, sizeof(entry->username), "%s", clients[i].username);
+        entry->available = (clients[i].state == LOBBY_CLIENT_REGISTERED || clients[i].state == LOBBY_CLIENT_QUEUED);
+        entry->queued = (clients[i].state == LOBBY_CLIENT_QUEUED);
+    }
+
+    for (int i = 0; i < maxClients; i++) {
+        if (clients[i].peer != NULL) {
+            ServerSendMessage(clients[i].peer, NET_MSG_LOBBY_PLAYER_LIST, &list, sizeof(list), ENET_PACKET_FLAG_RELIABLE);
+        }
+    }
+}
+
 int NetRunLobbyServer(int port) {
     if (enet_initialize() != 0) {
         printf("ERROR: Failed to initialize ENet lobby server.\n");
@@ -327,6 +345,7 @@ int NetRunLobbyServer(int port) {
                     client->pendingIndex = -1;
                 }
                 TryMatchQueuedPlayers(clients, 64);
+                BroadcastLobbyPlayerList(server, clients, 64);
             } else if (event.type == ENET_EVENT_TYPE_RECEIVE) {
                 LobbyClient* client = FindLobbyClientByPeer(clients, 64, event.peer);
                 if (client == NULL || event.packet->dataLength < sizeof(NetMessageHeader)) {
@@ -354,6 +373,7 @@ int NetRunLobbyServer(int port) {
                         snprintf(result.message, sizeof(result.message), "Connected as %s", client->username);
                     }
                     ServerSendMessage(client->peer, NET_MSG_LOBBY_REGISTER_RESULT, &result, sizeof(result), ENET_PACKET_FLAG_RELIABLE);
+                    BroadcastLobbyPlayerList(server, clients, 64);
                 } else if (header.type == NET_MSG_LOBBY_CHALLENGE_REQUEST && payloadSize >= sizeof(LobbyChallengeRequestMessage)) {
                     const LobbyChallengeRequestMessage* msg = (const LobbyChallengeRequestMessage*)payload;
                     LobbyQueueStatusMessage status = {0};
@@ -378,6 +398,7 @@ int NetRunLobbyServer(int port) {
                         snprintf(status.message, sizeof(status.message), "Challenge sent to %s", target->username);
                     }
                     ServerSendMessage(client->peer, NET_MSG_LOBBY_QUEUE_STATUS, &status, sizeof(status), ENET_PACKET_FLAG_RELIABLE);
+                    BroadcastLobbyPlayerList(server, clients, 64);
                 } else if (header.type == NET_MSG_LOBBY_CHALLENGE_RESPONSE && payloadSize >= sizeof(LobbyChallengeResponseMessage)) {
                     const LobbyChallengeResponseMessage* msg = (const LobbyChallengeResponseMessage*)payload;
                     LobbyClient* challenger = FindLobbyClientByUsername(clients, 64, msg->fromUsername);
@@ -391,6 +412,7 @@ int NetRunLobbyServer(int port) {
                             ResetPendingState(clients, 64, challenger);
                             ResetPendingState(clients, 64, client);
                         }
+                        BroadcastLobbyPlayerList(server, clients, 64);
                     }
                 } else if (header.type == NET_MSG_LOBBY_QUEUE_JOIN) {
                     LobbyQueueStatusMessage status = {0};
@@ -403,6 +425,7 @@ int NetRunLobbyServer(int port) {
                         snprintf(status.message, sizeof(status.message), "Searching for a global match...");
                         ServerSendMessage(client->peer, NET_MSG_LOBBY_QUEUE_STATUS, &status, sizeof(status), ENET_PACKET_FLAG_RELIABLE);
                         TryMatchQueuedPlayers(clients, 64);
+                        BroadcastLobbyPlayerList(server, clients, 64);
                     }
                 }
 
