@@ -4,6 +4,10 @@
 *.out
 *.app
 *.dll
+!glfw3.dll
+!libraylib.dll
+!Urusai_Mania_Portable/glfw3.dll
+!Urusai_Mania_Portable/libraylib.dll
 *.so
 *.dylib
 *.a
