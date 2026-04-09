@@ -97,7 +97,7 @@ typedef struct {
     int pauseCursor;
     bool launchBattleAfterSelect;
     GameState pausedFromState;
-    bool editingUsername;
+    bool signInOpen;
     float onlineResultTimer;
     char onlineResultText[96];
 } FrontendState;
@@ -119,6 +119,7 @@ typedef struct {
     NetRole pendingMatchRole;
     int pendingAction;
     int playerListCursor;
+    bool globalListOpen;
     LobbyPlayerListMessage playerList;
 } MultiplayerMenuState;
 
@@ -218,16 +219,15 @@ static bool NetInputChanged(const NetInput* a, const NetInput* b) {
 static void LoadSavedUsername(char* buffer, int bufferSize) {
     FILE* file = fopen(PROFILE_PATH, "rb");
     if (file == NULL) {
-        snprintf(buffer, bufferSize, "player");
+        buffer[0] = '\0';
         return;
     }
 
     if (fgets(buffer, bufferSize, file) == NULL) {
-        snprintf(buffer, bufferSize, "player");
+        buffer[0] = '\0';
     } else {
         size_t len = strcspn(buffer, "\r\n");
         buffer[len] = '\0';
-        if (buffer[0] == '\0') snprintf(buffer, bufferSize, "player");
     }
     fclose(file);
 }
@@ -1280,7 +1280,7 @@ static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
     DrawRectangleLinesEx((Rectangle){ panel.x + 6, panel.y + 6, panel.width - 12, panel.height - 12 }, 1.0f, ColorAlpha(WHITE, 0.18f));
 }
 
-static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool editingUsername) {
+static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool signInOpen) {
     static const char* items[] = { "LOCAL", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
     int count = 5;
     DrawMenuBackground(video);
@@ -1288,14 +1288,12 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
     DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
     RetroText("URUSAI MANIA", (Vector2){ 245, 56 }, 34.0f, 1.0f, (Color){240, 244, 255, 255});
     RetroText("FIGHTER GAME ENGINE", (Vector2){ 230, 94 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
-    DrawPixelPanel((Rectangle){ 690, 46, 180, 54 }, (Color){12, 18, 30, 220}, (Color){120, 220, 255, 255});
-    if (editingUsername) {
-        RetroText("PLAYER ID", (Vector2){ 718, 56 }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
-        RetroText(username, (Vector2){ 714, 74 }, 12.0f, 1.0f, WHITE);
-    } else {
+    DrawPixelPanel((Rectangle){ 42, 44, 138, 40 }, (Color){12, 18, 30, 220}, (Color){255, 214, 118, 255});
+    RetroText("SIGN IN", (Vector2){ 72, 56 }, 14.0f, 1.0f, (Color){255, 214, 118, 255});
+    if (username[0] != '\0') {
         char greet[96];
-        snprintf(greet, sizeof(greet), "HI %s!", username);
-        RetroText(greet, (Vector2){ 712, 64 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
+        snprintf(greet, sizeof(greet), "Hi %s!", username);
+        RetroText(greet, (Vector2){ 44, 98 }, 16.0f, 1.0f, (Color){255, 214, 118, 255});
     }
 
     DrawPixelPanel((Rectangle){ 240, 146, 480, 292 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
@@ -1311,55 +1309,66 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
                   16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
-    RetroText("TAB TO EDIT PLAYER ID", (Vector2){ 96, 430 }, 12.0f, 1.0f, (Color){120, 220, 255, 240});
     RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 430 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
     RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 450 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+
+    if (signInOpen) {
+        DrawRectangle(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(BLACK, 0.55f));
+        DrawPixelPanel((Rectangle){ 258, 162, 444, 152 }, (Color){18, 14, 30, 240}, (Color){255, 214, 118, 255});
+        RetroText("ENTER USERNAME", (Vector2){ 356, 190 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
+        DrawRectangleRec((Rectangle){ 300, 234, 360, 28 }, (Color){12, 20, 34, 230});
+        DrawRectangleLinesEx((Rectangle){ 300, 234, 360, 28 }, 2.0f, (Color){255, 214, 118, 255});
+        RetroText(username[0] ? username : "type here", (Vector2){ 314, 241 }, 14.0f, 1.0f, WHITE);
+        RetroText("ENTER TO SAVE  |  ESC TO CLOSE", (Vector2){ 318, 278 }, 11.0f, 1.0f, (Color){220, 230, 255, 240});
+    }
 }
 
 static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
-    static const char* items[] = { "YOUR USERNAME", "DIRECT 1V1 USERNAME", "SEND DIRECT 1V1", "GLOBAL MATCHMAKING", "BACK" };
+    static const char* items[] = { "DIRECT 1V1 USERNAME", "SEND DIRECT 1V1", "GLOBAL MATCHMAKING", "BACK" };
     DrawMenuBackground(video);
 
     DrawPixelPanel((Rectangle){ 148, 56, 664, 426 }, (Color){16, 12, 26, 228}, (Color){110, 220, 255, 255});
     RetroText("MULTIPLAYER DOMAIN", (Vector2){ 240, 82 }, 28.0f, 1.0f, WHITE);
     RetroText("USERNAME CHALLENGES + GLOBAL QUEUE", (Vector2){ 218, 118 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
 
-    for (int i = 0; i < 5; i++) {
-        Rectangle row = { 220, 164 + i * 42.0f, 520, 30 };
-        bool selected = (i == mpMenu->cursor);
-        DrawRectangleRec(row, selected ? (Color){42, 110, 156, 220} : (Color){34, 28, 52, 205});
-        DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
-        if (i < 2) {
-            RetroText(items[i], (Vector2){ row.x + 12.0f, row.y + 6.0f }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
-            const char* value = (i == 0) ? mpMenu->username : mpMenu->targetUsername;
-            RetroText(value[0] ? value : (i == 0 ? "type your username" : "type opponent username"),
-                      (Vector2){ row.x + 248.0f, row.y + 6.0f }, 12.0f, 1.0f,
-                      selected ? WHITE : (Color){210, 220, 230, 240});
-        } else {
-            Vector2 size = RetroMeasure(items[i], 14.0f, 1.0f);
-            RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f },
-                      14.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+    if (!mpMenu->globalListOpen) {
+        for (int i = 0; i < 4; i++) {
+            Rectangle row = { 220, 164 + i * 48.0f, 520, 34 };
+            bool selected = (i == mpMenu->cursor);
+            DrawRectangleRec(row, selected ? (Color){42, 110, 156, 220} : (Color){34, 28, 52, 205});
+            DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
+            if (i == 0) {
+                RetroText(items[i], (Vector2){ row.x + 12.0f, row.y + 8.0f }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+                RetroText(mpMenu->targetUsername[0] ? mpMenu->targetUsername : "type opponent username",
+                          (Vector2){ row.x + 240.0f, row.y + 8.0f }, 12.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+            } else {
+                Vector2 size = RetroMeasure(items[i], 14.0f, 1.0f);
+                RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 8.0f },
+                          14.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+            }
         }
-    }
-
-    DrawPixelPanel((Rectangle){ 192, 386, 576, 72 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
-    RetroText(mpMenu->statusText, (Vector2){ 212, 404 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
-    RetroText("SERVER: URUSAI LOBBY", (Vector2){ 212, 428 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
-
-    DrawPixelPanel((Rectangle){ 760, 112, 168, 250 }, (Color){12, 16, 32, 220}, (Color){120, 220, 255, 220});
-    RetroText("WAITING PLAYERS", (Vector2){ 776, 128 }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
-    if (mpMenu->playerList.count == 0) {
-        RetroText("No players", (Vector2){ 798, 176 }, 11.0f, 1.0f, (Color){220, 230, 255, 220});
     } else {
-        for (int i = 0; i < mpMenu->playerList.count && i < 8; i++) {
-            const LobbyPlayerEntry* entry = &mpMenu->playerList.players[i];
-            Rectangle row = { 772, 154.0f + i * 24.0f, 144, 20 };
-            bool selected = (i == mpMenu->playerListCursor);
-            DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){22, 28, 44, 205});
-            DrawRectangleLinesEx(row, 1.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 180});
-            RetroText(entry->username, (Vector2){ row.x + 6, row.y + 4 }, 10.0f, 1.0f, WHITE);
+        DrawPixelPanel((Rectangle){ 198, 156, 564, 232 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
+        RetroText("GLOBAL MATCHMAKING", (Vector2){ 348, 174 }, 18.0f, 1.0f, (Color){255, 214, 118, 255});
+        RetroText("SELECT A WAITING PLAYER FOR 1V1", (Vector2){ 300, 204 }, 12.0f, 1.0f, (Color){120, 220, 255, 240});
+        if (mpMenu->playerList.count == 0) {
+            RetroText("No waiting players online right now.", (Vector2){ 286, 264 }, 14.0f, 1.0f, (Color){220, 230, 255, 220});
+        } else {
+            for (int i = 0; i < mpMenu->playerList.count && i < 7; i++) {
+                const LobbyPlayerEntry* entry = &mpMenu->playerList.players[i];
+                Rectangle row = { 246, 236.0f + i * 24.0f, 468, 20 };
+                bool selected = (i == mpMenu->playerListCursor);
+                DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){22, 28, 44, 205});
+                DrawRectangleLinesEx(row, 1.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 180});
+                RetroText(entry->username, (Vector2){ row.x + 8, row.y + 4 }, 10.0f, 1.0f, WHITE);
+            }
         }
+        RetroText("ENTER TO CHALLENGE  |  ESC TO GO BACK", (Vector2){ 278, 354 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
     }
+
+    DrawPixelPanel((Rectangle){ 192, 396, 576, 62 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
+    RetroText(mpMenu->statusText, (Vector2){ 212, 414 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("SERVER: URUSAI LOBBY", (Vector2){ 212, 436 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
 
     if (mpMenu->hasIncomingChallenge) {
         DrawPixelPanel((Rectangle){ 244, 252, 472, 88 }, (Color){24, 18, 36, 240}, (Color){255, 96, 96, 255});
@@ -1407,6 +1416,7 @@ static void DisconnectMultiplayer(MatchMode* matchMode, MultiplayerMenuState* mp
     mpMenu->waitingForMatch = false;
     mpMenu->hasIncomingChallenge = false;
     mpMenu->connectingToMatch = false;
+    mpMenu->globalListOpen = false;
     mpMenu->pendingOpponent[0] = '\0';
     mpMenu->pendingHostIp[0] = '\0';
     snprintf(mpMenu->statusText, sizeof(mpMenu->statusText), "Connection closed.");
@@ -1498,10 +1508,9 @@ int main(int argc, char** argv) {
     frontend.pauseCursor = 0;
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
-    frontend.editingUsername = false;
+    frontend.signInOpen = false;
     mpMenu.cursor = 0;
     mpMenu.activeField = 0;
-    LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
     mpMenu.targetUsername[0] = '\0';
     mpMenu.incomingChallenge[0] = '\0';
     mpMenu.pendingHostIp[0] = '\0';
@@ -1509,6 +1518,7 @@ int main(int argc, char** argv) {
     mpMenu.pendingMatchRole = NET_ROLE_NONE;
     mpMenu.pendingAction = MP_ACTION_NONE;
     mpMenu.connectedToLobby = false;
+    mpMenu.globalListOpen = false;
     snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the lobby server...");
 
     FilePathList menuPaths = LoadDirectoryFilesEx("assets/menu_frames", ".png", false);
@@ -1551,6 +1561,7 @@ int main(int argc, char** argv) {
         gojoPortraitLoaded = true;
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
+    LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
     GameState state = STATE_MAIN_MENU;
     MatchMode matchMode = MATCH_MODE_LOCAL;
@@ -1603,6 +1614,7 @@ int main(int argc, char** argv) {
                         const LobbyRegisterResultMessage* result = (const LobbyRegisterResultMessage*)netBuffer;
                         mpMenu.registered = result->success != 0;
                         snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", result->message);
+                        if (result->success) SaveUsername(mpMenu.username);
                         if (result->success && mpMenu.pendingAction == MP_ACTION_DIRECT && mpMenu.targetUsername[0] != '\0') {
                             LobbyChallengeRequestMessage challenge = {0};
                             snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
@@ -1622,6 +1634,7 @@ int main(int argc, char** argv) {
                         const LobbyQueueStatusMessage* status = (const LobbyQueueStatusMessage*)netBuffer;
                         mpMenu.waitingForMatch = status->queued != 0;
                         snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", status->message);
+                        if (!status->queued) mpMenu.globalListOpen = false;
                     } else if (msgType == NET_MSG_LOBBY_PLAYER_LIST && payloadSize == sizeof(LobbyPlayerListMessage)) {
                         memcpy(&mpMenu.playerList, netBuffer, sizeof(LobbyPlayerListMessage));
                         if (mpMenu.playerList.count > 0) {
@@ -1650,9 +1663,9 @@ int main(int argc, char** argv) {
             }
 
             if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && gNetConnected && !mpMenu.registered &&
-                strcmp(mpMenu.statusText, "Connected to lobby. Register your username.") != 0 &&
+                strcmp(mpMenu.statusText, "Connected to lobby. Use Sign In on the main menu.") != 0 &&
                 strncmp(mpMenu.statusText, "Connecting", 10) == 0) {
-                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connected to lobby. Register your username.");
+                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connected to lobby. Use Sign In on the main menu.");
             }
 
             if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && !gNetConnected && gNetRole != NET_ROLE_NONE) {
@@ -1687,16 +1700,19 @@ int main(int argc, char** argv) {
 
         switch (state) {
             case STATE_MAIN_MENU: {
-                if (IsKeyPressed(KEY_TAB)) {
-                    frontend.editingUsername = !frontend.editingUsername;
-                    if (!frontend.editingUsername) SaveUsername(mpMenu.username);
+                Rectangle signInButton = { 42, 44, 138, 40 };
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), signInButton)) {
+                    frontend.signInOpen = true;
                 }
 
-                if (frontend.editingUsername) {
+                if (frontend.signInOpen) {
                     UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
-                    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                        frontend.editingUsername = false;
+                    if (IsKeyPressed(KEY_ENTER)) {
+                        frontend.signInOpen = false;
                         SaveUsername(mpMenu.username);
+                    }
+                    if (IsKeyPressed(KEY_ESCAPE)) {
+                        frontend.signInOpen = false;
                     }
                     break;
                 }
@@ -1763,21 +1779,33 @@ int main(int argc, char** argv) {
 
             case STATE_MULTIPLAYER:
                 if (IsKeyPressed(KEY_ESCAPE)) {
+                    if (mpMenu.globalListOpen) {
+                        mpMenu.globalListOpen = false;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Back to multiplayer menu.");
+                        break;
+                    }
                     DisconnectMultiplayer(&matchMode, &mpMenu);
                     NetInit();
                     state = STATE_MAIN_MENU;
                     break;
                 }
 
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 5;
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 4) % 5;
-                if (mpMenu.cursor == 3 && mpMenu.playerList.count > 0) {
-                    if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) mpMenu.playerListCursor = (mpMenu.playerListCursor + mpMenu.playerList.count - 1) % mpMenu.playerList.count;
-                    if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) mpMenu.playerListCursor = (mpMenu.playerListCursor + 1) % mpMenu.playerList.count;
+                if (mpMenu.globalListOpen) {
+                    if (mpMenu.playerList.count > 0) {
+                        if (IsKeyPressed(KEY_UP)) mpMenu.playerListCursor = (mpMenu.playerListCursor + mpMenu.playerList.count - 1) % mpMenu.playerList.count;
+                        if (IsKeyPressed(KEY_DOWN)) mpMenu.playerListCursor = (mpMenu.playerListCursor + 1) % mpMenu.playerList.count;
+                    }
+                } else if (mpMenu.activeField == 1) {
+                    UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
+                    if (IsKeyPressed(KEY_ENTER)) mpMenu.activeField = 0;
+                } else {
+                    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 4;
+                    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 3) % 4;
+                    if (mpMenu.cursor == 0 && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))) {
+                        mpMenu.activeField = 1;
+                        break;
+                    }
                 }
-
-                if (mpMenu.cursor == 0) UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
-                if (mpMenu.cursor == 1) UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
 
                 if (mpMenu.hasIncomingChallenge) {
                     if (IsKeyPressed(KEY_Y)) {
@@ -1798,10 +1826,10 @@ int main(int argc, char** argv) {
                     }
                 }
 
-                if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && !mpMenu.hasIncomingChallenge) {
-                    if (mpMenu.cursor == 2) {
+                if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && !mpMenu.hasIncomingChallenge && mpMenu.activeField == 0 && !mpMenu.globalListOpen) {
+                    if (mpMenu.cursor == 1) {
                         if (mpMenu.username[0] == '\0') {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter your username first.");
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Use Sign In on the main menu first.");
                         } else if (mpMenu.targetUsername[0] == '\0') {
                             snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter the opponent username to challenge.");
                         } else {
@@ -1816,30 +1844,33 @@ int main(int argc, char** argv) {
                                 NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
                             }
                         }
+                    } else if (mpMenu.cursor == 2) {
+                        mpMenu.globalListOpen = true;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Choose a waiting player for global matchmaking.");
                     } else if (mpMenu.cursor == 3) {
-                        if (mpMenu.username[0] == '\0') {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter your username first.");
-                        } else if (mpMenu.playerList.count == 0) {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "No waiting global players right now.");
-                        } else {
-                            const LobbyPlayerEntry* target = &mpMenu.playerList.players[mpMenu.playerListCursor];
-                            LobbyRegisterMessage reg = {0};
-                            snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
-                            snprintf(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), "%s", target->username);
-                            if (!mpMenu.registered) {
-                                mpMenu.pendingAction = MP_ACTION_QUEUE;
-                                NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
-                            } else {
-                                LobbyChallengeRequestMessage challenge = {0};
-                                snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", target->username);
-                                NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending global match request to %s...", target->username);
-                            }
-                        }
-                    } else if (mpMenu.cursor == 4) {
                         DisconnectMultiplayer(&matchMode, &mpMenu);
                         NetInit();
                         state = STATE_MAIN_MENU;
+                    }
+                }
+
+                if (mpMenu.globalListOpen && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && mpMenu.playerList.count > 0) {
+                    const LobbyPlayerEntry* target = &mpMenu.playerList.players[mpMenu.playerListCursor];
+                    if (mpMenu.username[0] == '\0') {
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Use Sign In on the main menu first.");
+                    } else {
+                        LobbyRegisterMessage reg = {0};
+                        snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
+                        snprintf(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), "%s", target->username);
+                        if (!mpMenu.registered) {
+                            mpMenu.pendingAction = MP_ACTION_QUEUE;
+                            NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
+                        } else {
+                            LobbyChallengeRequestMessage challenge = {0};
+                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", target->username);
+                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending global match request to %s...", target->username);
+                        }
                     }
                 }
 
@@ -2031,7 +2062,7 @@ int main(int argc, char** argv) {
 
         switch (state) {
             case STATE_MAIN_MENU:
-                DrawMainMenu(&menuVideo, frontend.cursor, mpMenu.username, frontend.editingUsername);
+                DrawMainMenu(&menuVideo, frontend.cursor, mpMenu.username, frontend.signInOpen);
                 break;
 
             case STATE_ABOUT:
