@@ -30,9 +30,8 @@
 #define YUJI_COMBO_WINDOW        2.2f
 #define MAX_MENU_FRAMES        128
 #define MAX_FIGHT_FRAMES       192
-#define NET_GAME_PORT         7777
-#define NET_LOBBY_PORT        8999
-#define NET_LOBBY_SERVER_IP   "127.0.0.1"
+#define NET_RELAY_PORT        8999
+#define NET_RELAY_SERVER_IP   "127.0.0.1"
 #define PROFILE_PATH          "player_profile.txt"
 #define ONLINE_RESULT_TIME      3.2f
 
@@ -55,12 +54,6 @@ typedef enum {
     MATCH_MODE_LOCAL = 0,
     MATCH_MODE_ONLINE
 } MatchMode;
-
-typedef enum {
-    MP_ACTION_NONE = 0,
-    MP_ACTION_DIRECT,
-    MP_ACTION_QUEUE
-} MultiplayerAction;
 
 typedef struct {
     int cursor;
@@ -98,6 +91,7 @@ typedef struct {
     bool launchBattleAfterSelect;
     GameState pausedFromState;
     bool signInOpen;
+    float signInSavedTimer;
     float onlineResultTimer;
     char onlineResultText[96];
 } FrontendState;
@@ -108,26 +102,19 @@ typedef struct {
     char username[NET_USERNAME_LEN];
     char targetUsername[NET_USERNAME_LEN];
     char incomingChallenge[NET_USERNAME_LEN];
+    char matchedOpponent[NET_USERNAME_LEN];
     char statusText[128];
     bool connectedToLobby;
-    bool registered;
+    bool authenticated;
+    bool authRequested;
     bool waitingForMatch;
     bool hasIncomingChallenge;
-    bool connectingToMatch;
-    char pendingHostIp[NET_HOST_IP_LEN];
-    char pendingOpponent[NET_USERNAME_LEN];
-    NetRole pendingMatchRole;
-    int pendingAction;
+    bool inOnlineMatch;
+    int localPlayerIndex;
     int playerListCursor;
     bool globalListOpen;
-    LobbyPlayerListMessage playerList;
+    NetPlayerListMessage playerList;
 } MultiplayerMenuState;
-
-typedef struct {
-    int cursor;
-    int selected;
-    int confirmed;
-} NetRosterState;
 
 typedef struct {
     int charId;
@@ -1280,7 +1267,19 @@ static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
     DrawRectangleLinesEx((Rectangle){ panel.x + 6, panel.y + 6, panel.width - 12, panel.height - 12 }, 1.0f, ColorAlpha(WHITE, 0.18f));
 }
 
-static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool signInOpen) {
+static Rectangle MainMenuRowRect(int index) {
+    return (Rectangle){ 294.0f, 196.0f + index * 44.0f, 372.0f, 32.0f };
+}
+
+static Rectangle MultiplayerRowRect(int index) {
+    return (Rectangle){ 220.0f, 164.0f + index * 48.0f, 520.0f, 34.0f };
+}
+
+static Rectangle PauseMenuRowRect(int index) {
+    return (Rectangle){ 334.0f, 214.0f + index * 34.0f, 290.0f, 26.0f };
+}
+
+static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool signInOpen, float signInSavedTimer) {
     static const char* items[] = { "LOCAL", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
     int count = 5;
     DrawMenuBackground(video);
@@ -1299,7 +1298,7 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
     DrawPixelPanel((Rectangle){ 240, 146, 480, 292 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
 
     for (int i = 0; i < count; i++) {
-        Rectangle row = { 294, 196 + i * 44.0f, 372, 32 };
+        Rectangle row = MainMenuRowRect(i);
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
@@ -1320,6 +1319,9 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
         DrawRectangleLinesEx((Rectangle){ 300, 234, 360, 28 }, 2.0f, (Color){255, 214, 118, 255});
         RetroText(username[0] ? username : "type here", (Vector2){ 314, 241 }, 14.0f, 1.0f, WHITE);
         RetroText("ENTER TO SAVE  |  ESC TO CLOSE", (Vector2){ 318, 278 }, 11.0f, 1.0f, (Color){220, 230, 255, 240});
+        if (signInSavedTimer > 0.0f) {
+            RetroText("SIGNED IN", (Vector2){ 450, 206 }, 11.0f, 1.0f, (Color){255, 230, 120, 255});
+        }
     }
 }
 
@@ -1333,7 +1335,7 @@ static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuSta
 
     if (!mpMenu->globalListOpen) {
         for (int i = 0; i < 4; i++) {
-            Rectangle row = { 220, 164 + i * 48.0f, 520, 34 };
+            Rectangle row = MultiplayerRowRect(i);
             bool selected = (i == mpMenu->cursor);
             DrawRectangleRec(row, selected ? (Color){42, 110, 156, 220} : (Color){34, 28, 52, 205});
             DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
@@ -1355,7 +1357,7 @@ static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuSta
             RetroText("No waiting players online right now.", (Vector2){ 286, 264 }, 14.0f, 1.0f, (Color){220, 230, 255, 220});
         } else {
             for (int i = 0; i < mpMenu->playerList.count && i < 7; i++) {
-                const LobbyPlayerEntry* entry = &mpMenu->playerList.players[i];
+                const NetWaitingPlayerEntry* entry = &mpMenu->playerList.players[i];
                 Rectangle row = { 246, 236.0f + i * 24.0f, 468, 20 };
                 bool selected = (i == mpMenu->playerListCursor);
                 DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){22, 28, 44, 205});
@@ -1363,12 +1365,15 @@ static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuSta
                 RetroText(entry->username, (Vector2){ row.x + 8, row.y + 4 }, 10.0f, 1.0f, WHITE);
             }
         }
+        DrawRectangleRec((Rectangle){ 368, 356, 224, 28 }, (Color){28, 34, 52, 220});
+        DrawRectangleLinesEx((Rectangle){ 368, 356, 224, 28 }, 2.0f, (Color){255, 214, 118, 255});
+        RetroText("BACK", (Vector2){ 453, 364 }, 12.0f, 1.0f, WHITE);
         RetroText("ENTER TO CHALLENGE  |  ESC TO GO BACK", (Vector2){ 278, 354 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
     }
 
     DrawPixelPanel((Rectangle){ 192, 396, 576, 62 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
     RetroText(mpMenu->statusText, (Vector2){ 212, 414 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
-    RetroText("SERVER: URUSAI LOBBY", (Vector2){ 212, 436 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
+    RetroText("SERVER: URUSAI RELAY", (Vector2){ 212, 436 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
 
     if (mpMenu->hasIncomingChallenge) {
         DrawPixelPanel((Rectangle){ 244, 252, 472, 88 }, (Color){24, 18, 36, 240}, (Color){255, 96, 96, 255});
@@ -1397,7 +1402,7 @@ static void DrawPauseMenu(const MenuVideo* video, int cursor) {
     DrawPixelPanel((Rectangle){ 300, 140, 360, 230 }, (Color){16, 12, 26, 230}, (Color){255, 205, 120, 255});
     RetroText("PAUSED", (Vector2){ 408, 166 }, 26.0f, 1.0f, WHITE);
     for (int i = 0; i < 4; i++) {
-        Rectangle row = { 334, 214 + i * 34.0f, 290, 26 };
+        Rectangle row = PauseMenuRowRect(i);
         bool selected = (i == cursor);
         DrawRectangleRec(row, selected ? (Color){90, 80, 150, 220} : (Color){32, 28, 48, 215});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
@@ -1412,26 +1417,21 @@ static void DisconnectMultiplayer(MatchMode* matchMode, MultiplayerMenuState* mp
     NetCleanup();
     *matchMode = MATCH_MODE_LOCAL;
     mpMenu->connectedToLobby = false;
-    mpMenu->registered = false;
+    mpMenu->authenticated = false;
+    mpMenu->authRequested = false;
     mpMenu->waitingForMatch = false;
     mpMenu->hasIncomingChallenge = false;
-    mpMenu->connectingToMatch = false;
+    mpMenu->inOnlineMatch = false;
     mpMenu->globalListOpen = false;
-    mpMenu->pendingOpponent[0] = '\0';
-    mpMenu->pendingHostIp[0] = '\0';
+    mpMenu->incomingChallenge[0] = '\0';
+    mpMenu->matchedOpponent[0] = '\0';
+    mpMenu->localPlayerIndex = 0;
     snprintf(mpMenu->statusText, sizeof(mpMenu->statusText), "Connection closed.");
 }
 
 static void SendRosterState(const SelectState* sel) {
     NetRosterState packet = PackRosterState(sel);
-    NetSendMessage(NET_MSG_SELECT, &packet, sizeof(packet), ENET_PACKET_FLAG_RELIABLE);
-}
-
-static void SendMatchSnapshot(GameState state, int domainCasterPlayer, float domainTimer,
-                              const DomainClashState* clash, const SelectState* p1sel,
-                              const SelectState* p2sel, const Fighter* p1, const Fighter* p2) {
-    MatchSnapshot snapshot = BuildMatchSnapshot(state, domainCasterPlayer, domainTimer, clash, p1sel, p2sel, p1, p2);
-    NetSendMessage(NET_MSG_MATCH_STATE, &snapshot, sizeof(snapshot), ENET_PACKET_FLAG_UNSEQUENCED);
+    NetSendRosterState(&packet);
 }
 
 static void UpdateTextField(char* buffer, int maxLen, bool allowDots) {
@@ -1452,6 +1452,15 @@ static void UpdateTextField(char* buffer, int maxLen, bool allowDots) {
         int len = (int)strlen(buffer);
         if (len > 0) buffer[len - 1] = '\0';
     }
+}
+
+static void LeaveOnlineMatch(MatchMode* matchMode, MultiplayerMenuState* mpMenu) {
+    if (mpMenu->inOnlineMatch && gNetConnected) {
+        NetSendMatchLeave();
+    } else if (mpMenu->globalListOpen && gNetConnected) {
+        NetLeaveQueue();
+    }
+    DisconnectMultiplayer(matchMode, mpMenu);
 }
 
 static void UpdateFightVideo(FightVideo* video) {
@@ -1485,11 +1494,10 @@ static void DrawFightVideoBackground(const FightVideo* video, bool domainActive,
 }
 
 int main(int argc, char** argv) {
-    if (argc > 1 && strcmp(argv[1], "--server") == 0) {
-        return NetRunLobbyServer(NET_LOBBY_PORT);
-    }
-
+    (void)argc;
+    (void)argv;
     InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(60);
     InitAudioDevice();
     NetInit();
@@ -1509,17 +1517,20 @@ int main(int argc, char** argv) {
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
     frontend.signInOpen = false;
+    frontend.signInSavedTimer = 0.0f;
     mpMenu.cursor = 0;
     mpMenu.activeField = 0;
     mpMenu.targetUsername[0] = '\0';
     mpMenu.incomingChallenge[0] = '\0';
-    mpMenu.pendingHostIp[0] = '\0';
-    mpMenu.pendingOpponent[0] = '\0';
-    mpMenu.pendingMatchRole = NET_ROLE_NONE;
-    mpMenu.pendingAction = MP_ACTION_NONE;
+    mpMenu.matchedOpponent[0] = '\0';
+    mpMenu.localPlayerIndex = 0;
     mpMenu.connectedToLobby = false;
+    mpMenu.authenticated = false;
+    mpMenu.authRequested = false;
+    mpMenu.waitingForMatch = false;
+    mpMenu.inOnlineMatch = false;
     mpMenu.globalListOpen = false;
-    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the lobby server...");
+    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connect to multiplayer to reach the relay.");
 
     FilePathList menuPaths = LoadDirectoryFilesEx("assets/menu_frames", ".png", false);
     if (menuPaths.count > 0) {
@@ -1577,10 +1588,8 @@ int main(int argc, char** argv) {
     int domainCasterPlayer = 0;
     float domainTimer = 0.0f;
     DomainClashState clash = {0};
-    NetInput hostInput = {0};
-    NetInput hostPrevInput = {0};
-    NetInput clientInput = {0};
-    NetInput clientPrevInput = {0};
+    NetInput remoteInput = {0};
+    NetInput remotePrevInput = {0};
     NetInput localNetInput = {0};
     NetInput localNetPrevInput = {0};
 
@@ -1604,124 +1613,137 @@ int main(int argc, char** argv) {
         ParticleUpdate();
         AnnounceUpdate();
 
+        if (frontend.signInSavedTimer > 0.0f) {
+            frontend.signInSavedTimer -= GetFrameTime();
+            if (frontend.signInSavedTimer <= 0.0f) {
+                frontend.signInSavedTimer = 0.0f;
+                frontend.signInOpen = false;
+            }
+        }
+
         if (matchMode == MATCH_MODE_ONLINE || state == STATE_MULTIPLAYER) {
+            bool remoteMatchClosed = false;
             unsigned char netBuffer[2048] = {0};
             NetMessageType msgType = NET_MSG_NONE;
             size_t payloadSize = 0;
+
             while (NetPollMessage(&msgType, netBuffer, sizeof(netBuffer), &payloadSize)) {
-                if (state == STATE_MULTIPLAYER) {
-                    if (msgType == NET_MSG_LOBBY_REGISTER_RESULT && payloadSize == sizeof(LobbyRegisterResultMessage)) {
-                        const LobbyRegisterResultMessage* result = (const LobbyRegisterResultMessage*)netBuffer;
-                        mpMenu.registered = result->success != 0;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", result->message);
-                        if (result->success) SaveUsername(mpMenu.username);
-                        if (result->success && mpMenu.pendingAction == MP_ACTION_DIRECT && mpMenu.targetUsername[0] != '\0') {
-                            LobbyChallengeRequestMessage challenge = {0};
-                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
-                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                        } else if (result->success && mpMenu.pendingAction == MP_ACTION_QUEUE && mpMenu.targetUsername[0] != '\0') {
-                            LobbyChallengeRequestMessage challenge = {0};
-                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
-                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                        }
-                        mpMenu.pendingAction = MP_ACTION_NONE;
-                    } else if (msgType == NET_MSG_LOBBY_CHALLENGE_NOTIFY && payloadSize == sizeof(LobbyChallengeNotifyMessage)) {
-                        const LobbyChallengeNotifyMessage* notify = (const LobbyChallengeNotifyMessage*)netBuffer;
-                        snprintf(mpMenu.incomingChallenge, sizeof(mpMenu.incomingChallenge), "%s", notify->fromUsername);
-                        mpMenu.hasIncomingChallenge = true;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s challenged you to a 1v1.", notify->fromUsername);
-                    } else if (msgType == NET_MSG_LOBBY_QUEUE_STATUS && payloadSize == sizeof(LobbyQueueStatusMessage)) {
-                        const LobbyQueueStatusMessage* status = (const LobbyQueueStatusMessage*)netBuffer;
-                        mpMenu.waitingForMatch = status->queued != 0;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", status->message);
-                        if (!status->queued) mpMenu.globalListOpen = false;
-                    } else if (msgType == NET_MSG_LOBBY_PLAYER_LIST && payloadSize == sizeof(LobbyPlayerListMessage)) {
-                        memcpy(&mpMenu.playerList, netBuffer, sizeof(LobbyPlayerListMessage));
-                        if (mpMenu.playerList.count > 0) {
-                            if (mpMenu.playerListCursor >= mpMenu.playerList.count) mpMenu.playerListCursor = mpMenu.playerList.count - 1;
-                            if (mpMenu.playerListCursor < 0) mpMenu.playerListCursor = 0;
-                        } else {
-                            mpMenu.playerListCursor = 0;
-                        }
-                    } else if (msgType == NET_MSG_LOBBY_MATCH_FOUND && payloadSize == sizeof(LobbyMatchFoundMessage)) {
-                        const LobbyMatchFoundMessage* found = (const LobbyMatchFoundMessage*)netBuffer;
-                        mpMenu.connectingToMatch = true;
-                        mpMenu.waitingForMatch = false;
-                        mpMenu.pendingMatchRole = (NetRole)found->role;
-                        snprintf(mpMenu.pendingHostIp, sizeof(mpMenu.pendingHostIp), "%s", found->hostIp);
-                        snprintf(mpMenu.pendingOpponent, sizeof(mpMenu.pendingOpponent), "%s", found->opponentUsername);
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Match found vs %s. Connecting...", found->opponentUsername);
+                if (msgType == NET_MSG_AUTH_RESULT && payloadSize == sizeof(NetAuthResultMessage)) {
+                    const NetAuthResultMessage* result = (const NetAuthResultMessage*)netBuffer;
+                    mpMenu.authenticated = result->success != 0;
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", result->message);
+                } else if (msgType == NET_MSG_STATUS && payloadSize == sizeof(NetStatusMessage)) {
+                    const NetStatusMessage* statusMsg = (const NetStatusMessage*)netBuffer;
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", statusMsg->message);
+                } else if (msgType == NET_MSG_PLAYER_LIST && payloadSize == sizeof(NetPlayerListMessage)) {
+                    memcpy(&mpMenu.playerList, netBuffer, sizeof(NetPlayerListMessage));
+                    if (mpMenu.playerList.count > 0) {
+                        if (mpMenu.playerListCursor >= mpMenu.playerList.count) mpMenu.playerListCursor = mpMenu.playerList.count - 1;
+                        if (mpMenu.playerListCursor < 0) mpMenu.playerListCursor = 0;
+                    } else {
+                        mpMenu.playerListCursor = 0;
                     }
-                } else if (msgType == NET_MSG_SELECT && payloadSize == sizeof(NetRosterState) && gNetRole == NET_ROLE_HOST) {
-                    UnpackRosterState(&p2sel, (const NetRosterState*)netBuffer);
-                } else if (msgType == NET_MSG_INPUT && payloadSize == sizeof(NetInput) && gNetRole == NET_ROLE_HOST) {
-                    memcpy(&clientInput, netBuffer, sizeof(NetInput));
-                } else if (msgType == NET_MSG_MATCH_STATE && payloadSize == sizeof(MatchSnapshot) && gNetRole == NET_ROLE_CLIENT) {
-                    ApplyMatchSnapshot((const MatchSnapshot*)netBuffer, &state, &domainCasterPlayer, &domainTimer,
-                                       &clash, &p1sel, &p2sel, &p1, &p2);
+                } else if (msgType == NET_MSG_DIRECT_CHALLENGE_NOTIFY && payloadSize == sizeof(NetDirectChallengeNotifyMessage)) {
+                    const NetDirectChallengeNotifyMessage* notify = (const NetDirectChallengeNotifyMessage*)netBuffer;
+                    snprintf(mpMenu.incomingChallenge, sizeof(mpMenu.incomingChallenge), "%s", notify->fromUsername);
+                    mpMenu.hasIncomingChallenge = true;
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s wants to 1v1 you.", notify->fromUsername);
+                } else if (msgType == NET_MSG_MATCH_FOUND && payloadSize == sizeof(NetMatchFoundMessage)) {
+                    const NetMatchFoundMessage* found = (const NetMatchFoundMessage*)netBuffer;
+                    mpMenu.waitingForMatch = false;
+                    mpMenu.hasIncomingChallenge = false;
+                    mpMenu.globalListOpen = false;
+                    mpMenu.inOnlineMatch = true;
+                    mpMenu.localPlayerIndex = found->localPlayerIndex;
+                    snprintf(mpMenu.matchedOpponent, sizeof(mpMenu.matchedOpponent), "%s", found->opponentUsername);
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Match found vs %s. Choose your sorcerer.", found->opponentUsername);
+                    p1sel = (SelectState){ 0, CHAR_SUKUNA, false };
+                    p2sel = (SelectState){ 4, CHAR_YUJI, false };
+                    memset(&remoteInput, 0, sizeof(remoteInput));
+                    memset(&remotePrevInput, 0, sizeof(remotePrevInput));
+                    memset(&localNetInput, 0, sizeof(localNetInput));
+                    memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
+                    frontend.launchBattleAfterSelect = true;
+                    state = STATE_CHAR_SELECT;
+                } else if (msgType == NET_MSG_MATCH_LEAVE) {
+                    remoteMatchClosed = true;
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Opponent left the match.");
+                } else if (msgType == NET_MSG_ROSTER && payloadSize == sizeof(NetRosterState)) {
+                    SelectState* remoteSel = (mpMenu.localPlayerIndex == 0) ? &p2sel : &p1sel;
+                    UnpackRosterState(remoteSel, (const NetRosterState*)netBuffer);
+                } else if (msgType == NET_MSG_INPUT && payloadSize == sizeof(NetInput)) {
+                    memcpy(&remoteInput, netBuffer, sizeof(NetInput));
                 }
             }
 
-            if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && gNetConnected && !mpMenu.registered &&
-                strcmp(mpMenu.statusText, "Connected to lobby. Use Sign In on the main menu.") != 0 &&
-                strncmp(mpMenu.statusText, "Connecting", 10) == 0) {
-                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connected to lobby. Use Sign In on the main menu.");
-            }
-
-            if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && !gNetConnected && gNetRole != NET_ROLE_NONE) {
-                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Lobby server disconnected.");
-                mpMenu.connectedToLobby = false;
-            }
-
-            if (state == STATE_MULTIPLAYER && mpMenu.connectingToMatch) {
+            if ((state == STATE_MULTIPLAYER || state == STATE_CHAR_SELECT || state == STATE_BATTLE ||
+                 state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) &&
+                mpMenu.connectedToLobby && !gNetConnected) {
+                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Relay server disconnected.");
                 DisconnectMultiplayer(&matchMode, &mpMenu);
                 NetInit();
-                matchMode = MATCH_MODE_ONLINE;
-                mpMenu.connectedToLobby = false;
-                if (mpMenu.pendingMatchRole == NET_ROLE_HOST) {
-                    if (NetHostCreate(NET_GAME_PORT)) {
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Matched vs %s. Waiting for them to join...", mpMenu.pendingOpponent);
-                    }
-                } else if (mpMenu.pendingMatchRole == NET_ROLE_CLIENT) {
-                    if (NetClientConnect(mpMenu.pendingHostIp, NET_GAME_PORT)) {
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Joining %s...", mpMenu.pendingOpponent);
-                    }
-                }
-                mpMenu.connectingToMatch = false;
-            }
-
-            if (!gNetConnected && gNetRole != NET_ROLE_NONE && state != STATE_MULTIPLAYER) {
-                DisconnectMultiplayer(&matchMode, &mpMenu);
                 p1sel.confirmed = false;
                 p2sel.confirmed = false;
                 state = STATE_MAIN_MENU;
+            }
+
+            if (remoteMatchClosed) {
+                DisconnectMultiplayer(&matchMode, &mpMenu);
+                NetInit();
+                p1sel.confirmed = false;
+                p2sel.confirmed = false;
+                state = STATE_MAIN_MENU;
+            }
+
+            if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && gNetConnected && mpMenu.username[0] != '\0' && !mpMenu.authenticated && !mpMenu.authRequested) {
+                NetSendAuth(mpMenu.username);
+                mpMenu.authRequested = true;
+                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Signing in as %s...", mpMenu.username);
             }
         }
 
         switch (state) {
             case STATE_MAIN_MENU: {
+                int activateIndex = -1;
                 Rectangle signInButton = { 42, 44, 138, 40 };
+                Vector2 mousePos = GetMousePosition();
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), signInButton)) {
                     frontend.signInOpen = true;
+                    frontend.signInSavedTimer = 0.0f;
                 }
 
                 if (frontend.signInOpen) {
                     UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
                     if (IsKeyPressed(KEY_ENTER)) {
-                        frontend.signInOpen = false;
-                        SaveUsername(mpMenu.username);
+                        if (mpMenu.username[0] != '\0') {
+                            SaveUsername(mpMenu.username);
+                            frontend.signInSavedTimer = 1.0f;
+                        }
                     }
                     if (IsKeyPressed(KEY_ESCAPE)) {
                         frontend.signInOpen = false;
+                        frontend.signInSavedTimer = 0.0f;
                     }
                     break;
                 }
 
                 if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 5;
                 if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 4) % 5;
+                for (int i = 0; i < 5; i++) {
+                    if (CheckCollisionPointRec(mousePos, MainMenuRowRect(i))) {
+                        frontend.cursor = i;
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            activateIndex = i;
+                        }
+                    }
+                }
 
                 if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                    switch (frontend.cursor) {
+                    activateIndex = frontend.cursor;
+                }
+
+                if (activateIndex >= 0) {
+                    switch (activateIndex) {
                         case 0:
                             matchMode = MATCH_MODE_LOCAL;
                             if (HasConfirmedRoster(&p1sel, &p2sel)) {
@@ -1733,7 +1755,7 @@ int main(int argc, char** argv) {
                             }
                             break;
                         case 1:
-                            if (gNetRole != NET_ROLE_NONE || gNetConnected) {
+                            if (mpMenu.connectedToLobby || gNetConnected) {
                                 DisconnectMultiplayer(&matchMode, &mpMenu);
                                 NetInit();
                             }
@@ -1741,17 +1763,19 @@ int main(int argc, char** argv) {
                             p1sel.confirmed = false;
                             p2sel.confirmed = false;
                             mpMenu.cursor = 0;
-                            mpMenu.registered = false;
+                            mpMenu.authenticated = false;
+                            mpMenu.authRequested = false;
                             mpMenu.waitingForMatch = false;
                             mpMenu.hasIncomingChallenge = false;
-                            mpMenu.connectingToMatch = false;
-                            mpMenu.pendingAction = MP_ACTION_NONE;
-                            if (NetClientConnect(NET_LOBBY_SERVER_IP, NET_LOBBY_PORT)) {
+                            mpMenu.inOnlineMatch = false;
+                            mpMenu.globalListOpen = false;
+                            mpMenu.playerList.count = 0;
+                            if (NetConnectRelay(NET_RELAY_SERVER_IP, NET_RELAY_PORT)) {
                                 mpMenu.connectedToLobby = true;
-                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the lobby server...");
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the relay server...");
                             } else {
                                 mpMenu.connectedToLobby = false;
-                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Could not reach the lobby server.");
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Could not reach the relay server.");
                             }
                             state = STATE_MULTIPLAYER;
                             break;
@@ -1772,126 +1796,132 @@ int main(int argc, char** argv) {
             }
 
             case STATE_ABOUT:
-                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE)) {
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE) ||
+                    IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     state = STATE_MAIN_MENU;
                 }
                 break;
 
             case STATE_MULTIPLAYER:
-                if (IsKeyPressed(KEY_ESCAPE)) {
-                    if (mpMenu.globalListOpen) {
-                        mpMenu.globalListOpen = false;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Back to multiplayer menu.");
+                {
+                    int activateIndex = -1;
+                    Vector2 mousePos = GetMousePosition();
+                    Rectangle globalBackRect = { 368, 356, 224, 28 };
+
+                    if (IsKeyPressed(KEY_ESCAPE)) {
+                        if (mpMenu.globalListOpen) {
+                            if (gNetConnected) NetLeaveQueue();
+                            mpMenu.globalListOpen = false;
+                            mpMenu.waitingForMatch = false;
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Back to multiplayer menu.");
+                            break;
+                        }
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
+                        NetInit();
+                        state = STATE_MAIN_MENU;
                         break;
                     }
-                    DisconnectMultiplayer(&matchMode, &mpMenu);
-                    NetInit();
-                    state = STATE_MAIN_MENU;
-                    break;
-                }
 
-                if (mpMenu.globalListOpen) {
-                    if (mpMenu.playerList.count > 0) {
-                        if (IsKeyPressed(KEY_UP)) mpMenu.playerListCursor = (mpMenu.playerListCursor + mpMenu.playerList.count - 1) % mpMenu.playerList.count;
-                        if (IsKeyPressed(KEY_DOWN)) mpMenu.playerListCursor = (mpMenu.playerListCursor + 1) % mpMenu.playerList.count;
+                    if (mpMenu.hasIncomingChallenge) {
+                        if (IsKeyPressed(KEY_Y)) {
+                            NetSendChallengeResponse(mpMenu.incomingChallenge, true);
+                            mpMenu.hasIncomingChallenge = false;
+                            mpMenu.waitingForMatch = true;
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Accepting %s's challenge...", mpMenu.incomingChallenge);
+                        } else if (IsKeyPressed(KEY_N)) {
+                            NetSendChallengeResponse(mpMenu.incomingChallenge, false);
+                            mpMenu.hasIncomingChallenge = false;
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Challenge declined.");
+                        }
                     }
-                } else if (mpMenu.activeField == 1) {
-                    UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
-                    if (IsKeyPressed(KEY_ENTER)) mpMenu.activeField = 0;
-                } else {
+
+                    if (mpMenu.globalListOpen) {
+                        if (mpMenu.playerList.count > 0) {
+                            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.playerListCursor = (mpMenu.playerListCursor + mpMenu.playerList.count - 1) % mpMenu.playerList.count;
+                            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.playerListCursor = (mpMenu.playerListCursor + 1) % mpMenu.playerList.count;
+                            for (int i = 0; i < mpMenu.playerList.count && i < 7; i++) {
+                                Rectangle row = { 246.0f, 236.0f + i * 24.0f, 468.0f, 20.0f };
+                                if (CheckCollisionPointRec(mousePos, row)) {
+                                    mpMenu.playerListCursor = i;
+                                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                                        activateIndex = i;
+                                    }
+                                }
+                            }
+                        }
+                        if (CheckCollisionPointRec(mousePos, globalBackRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            if (gNetConnected) NetLeaveQueue();
+                            mpMenu.globalListOpen = false;
+                            mpMenu.waitingForMatch = false;
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Back to multiplayer menu.");
+                            break;
+                        }
+                        if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && mpMenu.playerList.count > 0) {
+                            activateIndex = mpMenu.playerListCursor;
+                        }
+                        if (activateIndex >= 0 && activateIndex < mpMenu.playerList.count) {
+                            const NetWaitingPlayerEntry* target = &mpMenu.playerList.players[activateIndex];
+                            snprintf(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), "%s", target->username);
+                            if (mpMenu.username[0] == '\0') {
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Use Sign In on the main menu first.");
+                            } else if (!mpMenu.authenticated) {
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Wait until your relay sign-in completes.");
+                            } else {
+                                NetSendDirectChallenge(target->username);
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending global match request to %s...", target->username);
+                            }
+                        }
+                        break;
+                    }
+
+                    if (mpMenu.activeField == 1) {
+                        UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
+                        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_ESCAPE)) {
+                            mpMenu.activeField = 0;
+                        }
+                        break;
+                    }
+
                     if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 4;
                     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 3) % 4;
-                    if (mpMenu.cursor == 0 && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))) {
+                    for (int i = 0; i < 4; i++) {
+                        if (CheckCollisionPointRec(mousePos, MultiplayerRowRect(i))) {
+                            mpMenu.cursor = i;
+                            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                                activateIndex = i;
+                            }
+                        }
+                    }
+                    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                        activateIndex = mpMenu.cursor;
+                    }
+
+                    if (activateIndex == 0) {
                         mpMenu.activeField = 1;
-                        break;
-                    }
-                }
-
-                if (mpMenu.hasIncomingChallenge) {
-                    if (IsKeyPressed(KEY_Y)) {
-                        LobbyChallengeResponseMessage response = {0};
-                        snprintf(response.fromUsername, sizeof(response.fromUsername), "%s", mpMenu.incomingChallenge);
-                        response.accepted = 1;
-                        NetSendMessage(NET_MSG_LOBBY_CHALLENGE_RESPONSE, &response, sizeof(response), ENET_PACKET_FLAG_RELIABLE);
-                        mpMenu.hasIncomingChallenge = false;
-                        mpMenu.waitingForMatch = true;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Accepting %s's challenge...", response.fromUsername);
-                    } else if (IsKeyPressed(KEY_N)) {
-                        LobbyChallengeResponseMessage response = {0};
-                        snprintf(response.fromUsername, sizeof(response.fromUsername), "%s", mpMenu.incomingChallenge);
-                        response.accepted = 0;
-                        NetSendMessage(NET_MSG_LOBBY_CHALLENGE_RESPONSE, &response, sizeof(response), ENET_PACKET_FLAG_RELIABLE);
-                        mpMenu.hasIncomingChallenge = false;
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Challenge declined.");
-                    }
-                }
-
-                if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && !mpMenu.hasIncomingChallenge && mpMenu.activeField == 0 && !mpMenu.globalListOpen) {
-                    if (mpMenu.cursor == 1) {
+                    } else if (activateIndex == 1) {
                         if (mpMenu.username[0] == '\0') {
                             snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Use Sign In on the main menu first.");
                         } else if (mpMenu.targetUsername[0] == '\0') {
                             snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter the opponent username to challenge.");
+                        } else if (!mpMenu.authenticated) {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Wait until your relay sign-in completes.");
                         } else {
-                            LobbyRegisterMessage reg = {0};
-                            snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
-                            if (!mpMenu.registered) {
-                                mpMenu.pendingAction = MP_ACTION_DIRECT;
-                                NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
-                            } else {
-                                LobbyChallengeRequestMessage challenge = {0};
-                                snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
-                                NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                            }
+                            NetSendDirectChallenge(mpMenu.targetUsername);
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending direct 1v1 to %s...", mpMenu.targetUsername);
                         }
-                    } else if (mpMenu.cursor == 2) {
+                    } else if (activateIndex == 2) {
                         mpMenu.globalListOpen = true;
+                        mpMenu.waitingForMatch = true;
+                        if (gNetConnected) {
+                            NetJoinQueue();
+                            NetRequestPlayerList();
+                        }
                         snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Choose a waiting player for global matchmaking.");
-                    } else if (mpMenu.cursor == 3) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                    } else if (activateIndex == 3) {
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
                         NetInit();
                         state = STATE_MAIN_MENU;
                     }
-                }
-
-                if (mpMenu.globalListOpen && (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && mpMenu.playerList.count > 0) {
-                    const LobbyPlayerEntry* target = &mpMenu.playerList.players[mpMenu.playerListCursor];
-                    if (mpMenu.username[0] == '\0') {
-                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Use Sign In on the main menu first.");
-                    } else {
-                        LobbyRegisterMessage reg = {0};
-                        snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
-                        snprintf(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), "%s", target->username);
-                        if (!mpMenu.registered) {
-                            mpMenu.pendingAction = MP_ACTION_QUEUE;
-                            NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
-                        } else {
-                            LobbyChallengeRequestMessage challenge = {0};
-                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", target->username);
-                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Sending global match request to %s...", target->username);
-                        }
-                    }
-                }
-
-                if (matchMode == MATCH_MODE_ONLINE && (gNetRole == NET_ROLE_HOST || gNetRole == NET_ROLE_CLIENT) &&
-                    mpMenu.pendingOpponent[0] != '\0' && !mpMenu.connectedToLobby && state == STATE_MULTIPLAYER && gNetConnected) {
-                    p1sel.cursor = 0;
-                    p1sel.selected = CHAR_SUKUNA;
-                    p1sel.confirmed = false;
-                    p2sel.cursor = 4;
-                    p2sel.selected = CHAR_YUJI;
-                    p2sel.confirmed = false;
-                    memset(&hostInput, 0, sizeof(hostInput));
-                    memset(&hostPrevInput, 0, sizeof(hostPrevInput));
-                    memset(&clientInput, 0, sizeof(clientInput));
-                    memset(&clientPrevInput, 0, sizeof(clientPrevInput));
-                    memset(&localNetInput, 0, sizeof(localNetInput));
-                    memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
-                    frontend.launchBattleAfterSelect = true;
-                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Matched vs %s. Choose your sorcerer.", mpMenu.pendingOpponent);
-                    mpMenu.pendingOpponent[0] = '\0';
-                    state = STATE_CHAR_SELECT;
                 }
                 break;
 
@@ -1900,15 +1930,14 @@ int main(int argc, char** argv) {
                     p1sel.confirmed = false;
                     p2sel.confirmed = false;
                     if (matchMode == MATCH_MODE_ONLINE) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
                         NetInit();
                     }
                     state = STATE_MAIN_MENU;
                     break;
                 }
                 if (matchMode == MATCH_MODE_ONLINE) {
-                    bool isHost = (gNetRole == NET_ROLE_HOST);
-                    SelectState* localSel = isHost ? &p1sel : &p2sel;
+                    SelectState* localSel = (mpMenu.localPlayerIndex == 0) ? &p1sel : &p2sel;
                     NetRosterState beforeSend = PackRosterState(localSel);
                     if (IsKeyPressed(KEY_A) && localSel->cursor > 0 && !localSel->confirmed) localSel->cursor--;
                     if (IsKeyPressed(KEY_D) && localSel->cursor < CHAR_COUNT - 1 && !localSel->confirmed) localSel->cursor++;
@@ -1922,12 +1951,13 @@ int main(int argc, char** argv) {
                         SendRosterState(localSel);
                     }
 
-                    if (isHost) {
-                        if (p1sel.confirmed && p2sel.confirmed) {
-                            ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
-                            state = STATE_BATTLE;
-                        }
-                        SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
+                    if (p1sel.confirmed && p2sel.confirmed) {
+                        ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                        memset(&remoteInput, 0, sizeof(remoteInput));
+                        memset(&remotePrevInput, 0, sizeof(remotePrevInput));
+                        memset(&localNetInput, 0, sizeof(localNetInput));
+                        memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
+                        state = STATE_BATTLE;
                     }
                 } else {
                     if (IsKeyPressed(KEY_A) && p1sel.cursor > 0) p1sel.cursor--;
@@ -1958,7 +1988,7 @@ int main(int argc, char** argv) {
             case STATE_DOMAIN_CLASH: {
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     if (matchMode == MATCH_MODE_ONLINE) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
                         NetInit();
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
@@ -1972,24 +2002,23 @@ int main(int argc, char** argv) {
                 }
                 if (matchMode == MATCH_MODE_ONLINE) {
                     localNetInput = GatherPlayerOneControls();
-                    if (gNetRole == NET_ROLE_HOST) {
-                        hostInput = localNetInput;
+                    NetSendInput(localNetInput);
+                    if (mpMenu.localPlayerIndex == 0) {
                         SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
-                                            &hostInput, &hostPrevInput, &clientInput, &clientPrevInput);
-                        SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
-                        hostPrevInput = hostInput;
-                        clientPrevInput = clientInput;
-                    } else if (gNetRole == NET_ROLE_CLIENT) {
-                        NetSendInput(localNetInput);
-                        localNetPrevInput = localNetInput;
+                                            &localNetInput, &localNetPrevInput, &remoteInput, &remotePrevInput);
+                    } else {
+                        SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
+                                            &remoteInput, &remotePrevInput, &localNetInput, &localNetPrevInput);
                     }
+                    localNetPrevInput = localNetInput;
+                    remotePrevInput = remoteInput;
                 } else {
                     SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
                                         NULL, NULL, NULL, NULL);
                 }
                 if (matchMode == MATCH_MODE_ONLINE && state == STATE_GAME_OVER && frontend.onlineResultTimer <= 0.0f) {
                     bool p1Won = (p2.hp <= 0.0f);
-                    bool localWon = (gNetRole == NET_ROLE_HOST) ? p1Won : !p1Won;
+                    bool localWon = (mpMenu.localPlayerIndex == 0) ? p1Won : !p1Won;
                     SetOnlineResult(&frontend, mpMenu.username, localWon);
                 }
                 break;
@@ -1999,18 +2028,30 @@ int main(int argc, char** argv) {
                     state = frontend.pausedFromState;
                     break;
                 }
+                {
+                    int activateIndex = -1;
+                    Vector2 mousePos = GetMousePosition();
+                    for (int i = 0; i < 4; i++) {
+                        if (CheckCollisionPointRec(mousePos, PauseMenuRowRect(i))) {
+                            frontend.pauseCursor = i;
+                            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                                activateIndex = i;
+                            }
+                        }
+                    }
                 if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.pauseCursor = (frontend.pauseCursor + 1) % 4;
                 if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.pauseCursor = (frontend.pauseCursor + 3) % 4;
-                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                    if (frontend.pauseCursor == 0) {
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) activateIndex = frontend.pauseCursor;
+                if (activateIndex >= 0) {
+                    if (activateIndex == 0) {
                         state = frontend.pausedFromState;
-                    } else if (frontend.pauseCursor == 1) {
+                    } else if (activateIndex == 1) {
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
                         frontend.launchBattleAfterSelect = false;
                         matchMode = MATCH_MODE_LOCAL;
                         state = STATE_CHAR_SELECT;
-                    } else if (frontend.pauseCursor == 2) {
+                    } else if (activateIndex == 2) {
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
                         matchMode = MATCH_MODE_LOCAL;
@@ -2019,13 +2060,14 @@ int main(int argc, char** argv) {
                         CloseWindow();
                     }
                 }
+                }
                 break;
             case STATE_GAME_OVER:
                 if (matchMode == MATCH_MODE_ONLINE && frontend.onlineResultTimer > 0.0f) {
                     frontend.onlineResultTimer -= GetFrameTime();
                     if (frontend.onlineResultTimer <= 0.0f) {
                         frontend.onlineResultTimer = 0.0f;
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
                         NetInit();
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
@@ -2035,7 +2077,7 @@ int main(int argc, char** argv) {
                 }
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     if (matchMode == MATCH_MODE_ONLINE) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
+                        LeaveOnlineMatch(&matchMode, &mpMenu);
                         NetInit();
                     }
                     state = STATE_MAIN_MENU;
@@ -2044,13 +2086,7 @@ int main(int argc, char** argv) {
                     break;
                 }
                 if (IsKeyPressed(KEY_ENTER)) {
-                    if (matchMode == MATCH_MODE_ONLINE) {
-                        if (gNetRole == NET_ROLE_HOST) {
-                            ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
-                            state = STATE_BATTLE;
-                            SendMatchSnapshot(state, domainCasterPlayer, domainTimer, &clash, &p1sel, &p2sel, &p1, &p2);
-                        }
-                    } else {
+                    if (matchMode != MATCH_MODE_ONLINE) {
                         ResetBattleState(&p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
                         state = STATE_BATTLE;
                     }
@@ -2062,7 +2098,7 @@ int main(int argc, char** argv) {
 
         switch (state) {
             case STATE_MAIN_MENU:
-                DrawMainMenu(&menuVideo, frontend.cursor, mpMenu.username, frontend.signInOpen);
+                DrawMainMenu(&menuVideo, frontend.cursor, mpMenu.username, frontend.signInOpen, frontend.signInSavedTimer);
                 break;
 
             case STATE_ABOUT:

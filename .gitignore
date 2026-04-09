@@ -65,6 +65,7 @@ m4/
 *.bak
 *.swp
 *.swo
+player_profile.txt
 
 # OS-generated junk
 .DS_Store

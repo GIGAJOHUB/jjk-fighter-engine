@@ -69,10 +69,16 @@ pacman -S mingw-w64-ucrt-x86_64-raylib
 ### 2. Build the game with GCC
 
 ```bash
-gcc main.c characters.c render.c -o jjk_game -lraylib -lgdi32 -lwinmm
+gcc main.c characters.c render.c netcode.c -o jjk_game.exe -lraylib -lenet -lgdi32 -lwinmm
 ```
 
-If you plan to wire in the networking layer during your local build, make sure ENet is also installed and linked for `netcode.c` as part of your MSYS2 toolchain.
+### 3. Build the dedicated relay server on Linux
+
+```bash
+gcc server.c netcode.c -o jjk_server -lenet
+```
+
+The client now uses a dedicated ENet relay model, so players connect to one public server instead of trying to host each other through NAT.
 
 ## Downloadable Build
 
@@ -134,6 +140,7 @@ render.c       -> Raylib rendering, particles, HUD, and screen effects
 render.h       -> rendering subsystem interfaces
 netcode.c      -> ENet-based input synchronization layer
 netcode.h      -> networking API and packet structures
+server.c       -> standalone ENet relay server for matchmaking and packet forwarding
 ```
 
 ## Version Control Policy
