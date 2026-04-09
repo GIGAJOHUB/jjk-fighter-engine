@@ -30,8 +30,9 @@
 #define YUJI_COMBO_WINDOW        2.2f
 #define MAX_MENU_FRAMES        128
 #define MAX_FIGHT_FRAMES       192
-#define NET_DEFAULT_PORT      7777
-#define NET_IP_MAX_LEN          63
+#define NET_GAME_PORT         7777
+#define NET_LOBBY_PORT        8999
+#define NET_LOBBY_SERVER_IP   "127.0.0.1"
 
 static Font gRetroFont = {0};
 static bool gRetroFontLoaded = false;
@@ -52,6 +53,12 @@ typedef enum {
     MATCH_MODE_LOCAL = 0,
     MATCH_MODE_ONLINE
 } MatchMode;
+
+typedef enum {
+    MP_ACTION_NONE = 0,
+    MP_ACTION_DIRECT,
+    MP_ACTION_QUEUE
+} MultiplayerAction;
 
 typedef struct {
     int cursor;
@@ -92,9 +99,20 @@ typedef struct {
 
 typedef struct {
     int cursor;
-    char ipAddress[NET_IP_MAX_LEN + 1];
+    int activeField;
+    char username[NET_USERNAME_LEN];
+    char targetUsername[NET_USERNAME_LEN];
+    char incomingChallenge[NET_USERNAME_LEN];
     char statusText[128];
-    int port;
+    bool connectedToLobby;
+    bool registered;
+    bool waitingForMatch;
+    bool hasIncomingChallenge;
+    bool connectingToMatch;
+    char pendingHostIp[NET_HOST_IP_LEN];
+    char pendingOpponent[NET_USERNAME_LEN];
+    NetRole pendingMatchRole;
+    int pendingAction;
 } MultiplayerMenuState;
 
 typedef struct {
@@ -1251,31 +1269,42 @@ static void DrawMainMenu(const MenuVideo* video, int cursor) {
 }
 
 static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
-    static const char* items[] = { "HOST LAN MATCH", "JOIN BY IP", "BACK" };
+    static const char* items[] = { "YOUR USERNAME", "DIRECT 1V1 USERNAME", "SEND DIRECT 1V1", "GLOBAL MATCHMAKING", "BACK" };
     DrawMenuBackground(video);
 
     DrawPixelPanel((Rectangle){ 148, 56, 664, 426 }, (Color){16, 12, 26, 228}, (Color){110, 220, 255, 255});
     RetroText("MULTIPLAYER DOMAIN", (Vector2){ 240, 82 }, 28.0f, 1.0f, WHITE);
-    RetroText("HOST WAITS ON PORT 7777", (Vector2){ 256, 118 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
+    RetroText("USERNAME CHALLENGES + GLOBAL QUEUE", (Vector2){ 218, 118 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
 
-    for (int i = 0; i < 3; i++) {
-        Rectangle row = { 238, 176 + i * 46.0f, 484, 32 };
+    for (int i = 0; i < 5; i++) {
+        Rectangle row = { 220, 164 + i * 42.0f, 520, 30 };
         bool selected = (i == mpMenu->cursor);
         DrawRectangleRec(row, selected ? (Color){42, 110, 156, 220} : (Color){34, 28, 52, 205});
         DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
-        Vector2 size = RetroMeasure(items[i], 15.0f, 1.0f);
-        RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f },
-                  15.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+        if (i < 2) {
+            RetroText(items[i], (Vector2){ row.x + 12.0f, row.y + 6.0f }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+            const char* value = (i == 0) ? mpMenu->username : mpMenu->targetUsername;
+            RetroText(value[0] ? value : (i == 0 ? "type your username" : "type opponent username"),
+                      (Vector2){ row.x + 248.0f, row.y + 6.0f }, 12.0f, 1.0f,
+                      selected ? WHITE : (Color){210, 220, 230, 240});
+        } else {
+            Vector2 size = RetroMeasure(items[i], 14.0f, 1.0f);
+            RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f },
+                      14.0f, 1.0f, selected ? WHITE : (Color){210, 220, 230, 240});
+        }
     }
 
-    DrawPixelPanel((Rectangle){ 218, 338, 524, 84 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
-    RetroText("SERVER IP", (Vector2){ 244, 352 }, 13.0f, 1.0f, (Color){255, 214, 118, 255});
-    DrawRectangleRec((Rectangle){ 244, 374, 472, 24 }, (Color){18, 20, 42, 235});
-    DrawRectangleLinesEx((Rectangle){ 244, 374, 472, 24 }, 2.0f, (Color){120, 185, 255, 255});
-    RetroText(mpMenu->ipAddress, (Vector2){ 256, 380 }, 13.0f, 1.0f, WHITE);
+    DrawPixelPanel((Rectangle){ 192, 386, 576, 72 }, (Color){12, 16, 32, 220}, (Color){255, 214, 118, 220});
+    RetroText(mpMenu->statusText, (Vector2){ 212, 404 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
+    RetroText("SERVER: URUSAI LOBBY", (Vector2){ 212, 428 }, 11.0f, 1.0f, (Color){120, 220, 255, 240});
 
-    RetroText(mpMenu->statusText, (Vector2){ 188, 438 }, 12.0f, 1.0f, (Color){220, 230, 255, 240});
-    RetroText("TYPE IP WHILE JOIN IS HIGHLIGHTED. ENTER TO ACT.", (Vector2){ 182, 460 }, 11.0f, 1.0f, (Color){210, 210, 230, 220});
+    if (mpMenu->hasIncomingChallenge) {
+        DrawPixelPanel((Rectangle){ 244, 252, 472, 88 }, (Color){24, 18, 36, 240}, (Color){255, 96, 96, 255});
+        char incoming[96];
+        snprintf(incoming, sizeof(incoming), "%s WANTS A 1V1", mpMenu->incomingChallenge);
+        RetroText(incoming, (Vector2){ 276, 274 }, 16.0f, 1.0f, WHITE);
+        RetroText("PRESS Y TO ACCEPT OR N TO DECLINE", (Vector2){ 268, 304 }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+    }
 }
 
 static void DrawAboutScreen(const MenuVideo* video) {
@@ -1325,20 +1354,23 @@ static void SendMatchSnapshot(GameState state, int domainCasterPlayer, float dom
     NetSendMessage(NET_MSG_MATCH_STATE, &snapshot, sizeof(snapshot), ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
-static void UpdateJoinIpInput(MultiplayerMenuState* mpMenu) {
+static void UpdateTextField(char* buffer, int maxLen, bool allowDots) {
     int key = GetCharPressed();
     while (key > 0) {
-        int len = (int)strlen(mpMenu->ipAddress);
-        if (len < NET_IP_MAX_LEN && ((key >= '0' && key <= '9') || key == '.')) {
-            mpMenu->ipAddress[len] = (char)key;
-            mpMenu->ipAddress[len + 1] = '\0';
+        int len = (int)strlen(buffer);
+        bool valid = (key >= '0' && key <= '9') || (key >= 'A' && key <= 'Z') ||
+                     (key >= 'a' && key <= 'z') || key == '_' || key == '-';
+        if (allowDots) valid = valid || key == '.';
+        if (len < maxLen - 1 && valid) {
+            buffer[len] = (char)key;
+            buffer[len + 1] = '\0';
         }
         key = GetCharPressed();
     }
 
     if (IsKeyPressed(KEY_BACKSPACE)) {
-        int len = (int)strlen(mpMenu->ipAddress);
-        if (len > 0) mpMenu->ipAddress[len - 1] = '\0';
+        int len = (int)strlen(buffer);
+        if (len > 0) buffer[len - 1] = '\0';
     }
 }
 
@@ -1372,7 +1404,11 @@ static void DrawFightVideoBackground(const FightVideo* video, bool domainActive,
     }
 }
 
-int main(void) {
+int main(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "--server") == 0) {
+        return NetRunLobbyServer(NET_LOBBY_PORT);
+    }
+
     InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
     SetTargetFPS(60);
     InitAudioDevice();
@@ -1393,9 +1429,16 @@ int main(void) {
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
     mpMenu.cursor = 0;
-    mpMenu.port = NET_DEFAULT_PORT;
-    snprintf(mpMenu.ipAddress, sizeof(mpMenu.ipAddress), "127.0.0.1");
-    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Host a match or enter a LAN IP to join.");
+    mpMenu.activeField = 0;
+    snprintf(mpMenu.username, sizeof(mpMenu.username), "player");
+    mpMenu.targetUsername[0] = '\0';
+    mpMenu.incomingChallenge[0] = '\0';
+    mpMenu.pendingHostIp[0] = '\0';
+    mpMenu.pendingOpponent[0] = '\0';
+    mpMenu.pendingMatchRole = NET_ROLE_NONE;
+    mpMenu.pendingAction = MP_ACTION_NONE;
+    mpMenu.connectedToLobby = false;
+    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the lobby server...");
 
     FilePathList menuPaths = LoadDirectoryFilesEx("assets/menu_frames", ".png", false);
     if (menuPaths.count > 0) {
@@ -1484,7 +1527,38 @@ int main(void) {
             NetMessageType msgType = NET_MSG_NONE;
             size_t payloadSize = 0;
             while (NetPollMessage(&msgType, netBuffer, sizeof(netBuffer), &payloadSize)) {
-                if (msgType == NET_MSG_SELECT && payloadSize == sizeof(NetRosterState) && gNetRole == NET_ROLE_HOST) {
+                if (state == STATE_MULTIPLAYER) {
+                    if (msgType == NET_MSG_LOBBY_REGISTER_RESULT && payloadSize == sizeof(LobbyRegisterResultMessage)) {
+                        const LobbyRegisterResultMessage* result = (const LobbyRegisterResultMessage*)netBuffer;
+                        mpMenu.registered = result->success != 0;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", result->message);
+                        if (result->success && mpMenu.pendingAction == MP_ACTION_DIRECT && mpMenu.targetUsername[0] != '\0') {
+                            LobbyChallengeRequestMessage challenge = {0};
+                            snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
+                            NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
+                        } else if (result->success && mpMenu.pendingAction == MP_ACTION_QUEUE) {
+                            NetSendMessage(NET_MSG_LOBBY_QUEUE_JOIN, NULL, 0, ENET_PACKET_FLAG_RELIABLE);
+                        }
+                        mpMenu.pendingAction = MP_ACTION_NONE;
+                    } else if (msgType == NET_MSG_LOBBY_CHALLENGE_NOTIFY && payloadSize == sizeof(LobbyChallengeNotifyMessage)) {
+                        const LobbyChallengeNotifyMessage* notify = (const LobbyChallengeNotifyMessage*)netBuffer;
+                        snprintf(mpMenu.incomingChallenge, sizeof(mpMenu.incomingChallenge), "%s", notify->fromUsername);
+                        mpMenu.hasIncomingChallenge = true;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s challenged you to a 1v1.", notify->fromUsername);
+                    } else if (msgType == NET_MSG_LOBBY_QUEUE_STATUS && payloadSize == sizeof(LobbyQueueStatusMessage)) {
+                        const LobbyQueueStatusMessage* status = (const LobbyQueueStatusMessage*)netBuffer;
+                        mpMenu.waitingForMatch = status->queued != 0;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "%s", status->message);
+                    } else if (msgType == NET_MSG_LOBBY_MATCH_FOUND && payloadSize == sizeof(LobbyMatchFoundMessage)) {
+                        const LobbyMatchFoundMessage* found = (const LobbyMatchFoundMessage*)netBuffer;
+                        mpMenu.connectingToMatch = true;
+                        mpMenu.waitingForMatch = false;
+                        mpMenu.pendingMatchRole = (NetRole)found->role;
+                        snprintf(mpMenu.pendingHostIp, sizeof(mpMenu.pendingHostIp), "%s", found->hostIp);
+                        snprintf(mpMenu.pendingOpponent, sizeof(mpMenu.pendingOpponent), "%s", found->opponentUsername);
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Match found vs %s. Connecting...", found->opponentUsername);
+                    }
+                } else if (msgType == NET_MSG_SELECT && payloadSize == sizeof(NetRosterState) && gNetRole == NET_ROLE_HOST) {
                     UnpackRosterState(&p2sel, (const NetRosterState*)netBuffer);
                 } else if (msgType == NET_MSG_INPUT && payloadSize == sizeof(NetInput) && gNetRole == NET_ROLE_HOST) {
                     memcpy(&clientInput, netBuffer, sizeof(NetInput));
@@ -1492,6 +1566,34 @@ int main(void) {
                     ApplyMatchSnapshot((const MatchSnapshot*)netBuffer, &state, &domainCasterPlayer, &domainTimer,
                                        &clash, &p1sel, &p2sel, &p1, &p2);
                 }
+            }
+
+            if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && gNetConnected && !mpMenu.registered &&
+                strcmp(mpMenu.statusText, "Connected to lobby. Register your username.") != 0 &&
+                strncmp(mpMenu.statusText, "Connecting", 10) == 0) {
+                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connected to lobby. Register your username.");
+            }
+
+            if (state == STATE_MULTIPLAYER && mpMenu.connectedToLobby && !gNetConnected && gNetRole != NET_ROLE_NONE) {
+                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Lobby server disconnected.");
+                mpMenu.connectedToLobby = false;
+            }
+
+            if (state == STATE_MULTIPLAYER && mpMenu.connectingToMatch) {
+                DisconnectMultiplayer(&matchMode, &mpMenu);
+                NetInit();
+                matchMode = MATCH_MODE_ONLINE;
+                mpMenu.connectedToLobby = false;
+                if (mpMenu.pendingMatchRole == NET_ROLE_HOST) {
+                    if (NetHostCreate(NET_GAME_PORT)) {
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Matched vs %s. Waiting for them to join...", mpMenu.pendingOpponent);
+                    }
+                } else if (mpMenu.pendingMatchRole == NET_ROLE_CLIENT) {
+                    if (NetClientConnect(mpMenu.pendingHostIp, NET_GAME_PORT)) {
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Joining %s...", mpMenu.pendingOpponent);
+                    }
+                }
+                mpMenu.connectingToMatch = false;
             }
 
             if (!gNetConnected && gNetRole != NET_ROLE_NONE && state != STATE_MULTIPLAYER) {
@@ -1528,7 +1630,18 @@ int main(void) {
                             p1sel.confirmed = false;
                             p2sel.confirmed = false;
                             mpMenu.cursor = 0;
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Host a match or enter a LAN IP to join.");
+                            mpMenu.registered = false;
+                            mpMenu.waitingForMatch = false;
+                            mpMenu.hasIncomingChallenge = false;
+                            mpMenu.connectingToMatch = false;
+                            mpMenu.pendingAction = MP_ACTION_NONE;
+                            if (NetClientConnect(NET_LOBBY_SERVER_IP, NET_LOBBY_PORT)) {
+                                mpMenu.connectedToLobby = true;
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the lobby server...");
+                            } else {
+                                mpMenu.connectedToLobby = false;
+                                snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Could not reach the lobby server.");
+                            }
                             state = STATE_MULTIPLAYER;
                             break;
                         case 2:
@@ -1561,37 +1674,71 @@ int main(void) {
                     break;
                 }
 
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 3;
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 2) % 3;
-                if (mpMenu.cursor == 1) UpdateJoinIpInput(&mpMenu);
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) mpMenu.cursor = (mpMenu.cursor + 1) % 5;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) mpMenu.cursor = (mpMenu.cursor + 4) % 5;
 
-                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                    if (mpMenu.cursor == 0) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
-                        NetInit();
-                        matchMode = MATCH_MODE_ONLINE;
-                        if (NetHostCreate(mpMenu.port)) {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Hosting on port %d. Waiting for challenger...", mpMenu.port);
+                if (mpMenu.cursor == 0) UpdateTextField(mpMenu.username, sizeof(mpMenu.username), false);
+                if (mpMenu.cursor == 1) UpdateTextField(mpMenu.targetUsername, sizeof(mpMenu.targetUsername), false);
+
+                if (mpMenu.hasIncomingChallenge) {
+                    if (IsKeyPressed(KEY_Y)) {
+                        LobbyChallengeResponseMessage response = {0};
+                        snprintf(response.fromUsername, sizeof(response.fromUsername), "%s", mpMenu.incomingChallenge);
+                        response.accepted = 1;
+                        NetSendMessage(NET_MSG_LOBBY_CHALLENGE_RESPONSE, &response, sizeof(response), ENET_PACKET_FLAG_RELIABLE);
+                        mpMenu.hasIncomingChallenge = false;
+                        mpMenu.waitingForMatch = true;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Accepting %s's challenge...", response.fromUsername);
+                    } else if (IsKeyPressed(KEY_N)) {
+                        LobbyChallengeResponseMessage response = {0};
+                        snprintf(response.fromUsername, sizeof(response.fromUsername), "%s", mpMenu.incomingChallenge);
+                        response.accepted = 0;
+                        NetSendMessage(NET_MSG_LOBBY_CHALLENGE_RESPONSE, &response, sizeof(response), ENET_PACKET_FLAG_RELIABLE);
+                        mpMenu.hasIncomingChallenge = false;
+                        snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Challenge declined.");
+                    }
+                }
+
+                if ((IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) && !mpMenu.hasIncomingChallenge) {
+                    if (mpMenu.cursor == 2) {
+                        if (mpMenu.username[0] == '\0') {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter your username first.");
+                        } else if (mpMenu.targetUsername[0] == '\0') {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter the opponent username to challenge.");
                         } else {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Could not host the server.");
+                            LobbyRegisterMessage reg = {0};
+                            snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
+                            if (!mpMenu.registered) {
+                                mpMenu.pendingAction = MP_ACTION_DIRECT;
+                                NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
+                            } else {
+                                LobbyChallengeRequestMessage challenge = {0};
+                                snprintf(challenge.targetUsername, sizeof(challenge.targetUsername), "%s", mpMenu.targetUsername);
+                                NetSendMessage(NET_MSG_LOBBY_CHALLENGE_REQUEST, &challenge, sizeof(challenge), ENET_PACKET_FLAG_RELIABLE);
+                            }
                         }
-                    } else if (mpMenu.cursor == 1) {
-                        DisconnectMultiplayer(&matchMode, &mpMenu);
-                        NetInit();
-                        matchMode = MATCH_MODE_ONLINE;
-                        if (NetClientConnect(mpMenu.ipAddress, mpMenu.port)) {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to %s:%d...", mpMenu.ipAddress, mpMenu.port);
+                    } else if (mpMenu.cursor == 3) {
+                        if (mpMenu.username[0] == '\0') {
+                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Enter your username first.");
                         } else {
-                            snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connection attempt failed.");
+                            LobbyRegisterMessage reg = {0};
+                            snprintf(reg.username, sizeof(reg.username), "%s", mpMenu.username);
+                            if (!mpMenu.registered) {
+                                mpMenu.pendingAction = MP_ACTION_QUEUE;
+                                NetSendMessage(NET_MSG_LOBBY_REGISTER, &reg, sizeof(reg), ENET_PACKET_FLAG_RELIABLE);
+                            } else {
+                                NetSendMessage(NET_MSG_LOBBY_QUEUE_JOIN, NULL, 0, ENET_PACKET_FLAG_RELIABLE);
+                            }
                         }
-                    } else {
+                    } else if (mpMenu.cursor == 4) {
                         DisconnectMultiplayer(&matchMode, &mpMenu);
                         NetInit();
                         state = STATE_MAIN_MENU;
                     }
                 }
 
-                if (gNetConnected) {
+                if (matchMode == MATCH_MODE_ONLINE && (gNetRole == NET_ROLE_HOST || gNetRole == NET_ROLE_CLIENT) &&
+                    mpMenu.pendingOpponent[0] != '\0' && !mpMenu.connectedToLobby && state == STATE_MULTIPLAYER && gNetConnected) {
                     p1sel.cursor = 0;
                     p1sel.selected = CHAR_SUKUNA;
                     p1sel.confirmed = false;
@@ -1605,7 +1752,8 @@ int main(void) {
                     memset(&localNetInput, 0, sizeof(localNetInput));
                     memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
                     frontend.launchBattleAfterSelect = true;
-                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connection established. Choose your sorcerer.");
+                    snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Matched vs %s. Choose your sorcerer.", mpMenu.pendingOpponent);
+                    mpMenu.pendingOpponent[0] = '\0';
                     state = STATE_CHAR_SELECT;
                 }
                 break;
