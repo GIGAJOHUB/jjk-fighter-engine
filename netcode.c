@@ -3,6 +3,7 @@
 #include <string.h>
 
 bool gNetConnected = false;
+static bool gENetInitialized = false;
 
 typedef struct {
     uint8_t type;
@@ -19,10 +20,12 @@ static void NetResetState(void) {
 }
 
 bool NetInit(void) {
+    if (gENetInitialized) return true;
     if (enet_initialize() != 0) {
         printf("ERROR: Failed to initialize ENet.\n");
         return false;
     }
+    gENetInitialized = true;
     return true;
 }
 
@@ -34,7 +37,22 @@ void NetCleanup(void) {
         enet_host_destroy(gClientHost);
     }
     NetResetState();
-    enet_deinitialize();
+    if (gENetInitialized) {
+        enet_deinitialize();
+        gENetInitialized = false;
+    }
+}
+
+void NetDisconnectOnly(void) {
+    if (gRelayPeer != NULL) {
+        enet_peer_disconnect_now(gRelayPeer, 0);
+        gRelayPeer = NULL;
+    }
+    if (gClientHost != NULL) {
+        enet_host_destroy(gClientHost);
+        gClientHost = NULL;
+    }
+    gNetConnected = false;
 }
 
 bool NetConnectRelay(const char* ipAddress, int port) {

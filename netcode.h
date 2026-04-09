@@ -99,6 +99,7 @@ typedef struct {
 
 bool NetInit(void);
 void NetCleanup(void);
+void NetDisconnectOnly(void);
 bool NetConnectRelay(const char* ipAddress, int port);
 bool NetSendAuth(const char* username);
 bool NetJoinQueue(void);

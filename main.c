@@ -31,8 +31,10 @@
 #define MAX_MENU_FRAMES        128
 #define MAX_FIGHT_FRAMES       192
 #define NET_RELAY_PORT        8999
-#define NET_RELAY_SERVER_IP   "127.0.0.1"
+#define RELAY_CONFIG_PATH     "relay.cfg"
 #define PROFILE_PATH          "player_profile.txt"
+
+static char gRelayServerIP[64] = "127.0.0.1";
 #define ONLINE_RESULT_TIME      3.2f
 
 static Font gRetroFont = {0};
@@ -201,6 +203,21 @@ static NetInput GatherPlayerOneControls(void) {
 
 static bool NetInputChanged(const NetInput* a, const NetInput* b) {
     return memcmp(a, b, sizeof(NetInput)) != 0;
+}
+
+static void LoadRelayConfig(void) {
+    FILE* f = fopen(RELAY_CONFIG_PATH, "r");
+    if (f == NULL) return;
+    char line[64];
+    while (fgets(line, sizeof(line), f)) {
+        size_t len = strcspn(line, "\r\n");
+        line[len] = '\0';
+        if (len > 0) {
+            snprintf(gRelayServerIP, sizeof(gRelayServerIP), "%s", line);
+            break;
+        }
+    }
+    fclose(f);
 }
 
 static void LoadSavedUsername(char* buffer, int bufferSize) {
@@ -1414,7 +1431,7 @@ static void DrawPauseMenu(const MenuVideo* video, int cursor) {
 }
 
 static void DisconnectMultiplayer(MatchMode* matchMode, MultiplayerMenuState* mpMenu) {
-    NetCleanup();
+    NetDisconnectOnly();
     *matchMode = MATCH_MODE_LOCAL;
     mpMenu->connectedToLobby = false;
     mpMenu->authenticated = false;
@@ -1501,6 +1518,7 @@ int main(int argc, char** argv) {
     SetTargetFPS(60);
     InitAudioDevice();
     NetInit();
+    LoadRelayConfig();
 
     for (int i = 0; i < MAX_PARTICLES; i++) gParticles[i].active = false;
 
@@ -1682,7 +1700,6 @@ int main(int argc, char** argv) {
                 mpMenu.connectedToLobby && !gNetConnected) {
                 snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Relay server disconnected.");
                 DisconnectMultiplayer(&matchMode, &mpMenu);
-                NetInit();
                 p1sel.confirmed = false;
                 p2sel.confirmed = false;
                 state = STATE_MAIN_MENU;
@@ -1690,7 +1707,6 @@ int main(int argc, char** argv) {
 
             if (remoteMatchClosed) {
                 DisconnectMultiplayer(&matchMode, &mpMenu);
-                NetInit();
                 p1sel.confirmed = false;
                 p2sel.confirmed = false;
                 state = STATE_MAIN_MENU;
@@ -1758,7 +1774,6 @@ int main(int argc, char** argv) {
                         case 1:
                             if (mpMenu.connectedToLobby || gNetConnected) {
                                 DisconnectMultiplayer(&matchMode, &mpMenu);
-                                NetInit();
                             }
                             matchMode = MATCH_MODE_ONLINE;
                             p1sel.confirmed = false;
@@ -1771,7 +1786,7 @@ int main(int argc, char** argv) {
                             mpMenu.inOnlineMatch = false;
                             mpMenu.globalListOpen = false;
                             mpMenu.playerList.count = 0;
-                            if (NetConnectRelay(NET_RELAY_SERVER_IP, NET_RELAY_PORT)) {
+                            if (NetConnectRelay(gRelayServerIP, NET_RELAY_PORT)) {
                                 mpMenu.connectedToLobby = true;
                                 snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Connecting to the relay server...");
                             } else {
@@ -1818,7 +1833,6 @@ int main(int argc, char** argv) {
                             break;
                         }
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                         state = STATE_MAIN_MENU;
                         break;
                     }
@@ -1920,7 +1934,6 @@ int main(int argc, char** argv) {
                         snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Choose a waiting player for global matchmaking.");
                     } else if (activateIndex == 3) {
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                         state = STATE_MAIN_MENU;
                     }
                 }
@@ -1932,7 +1945,6 @@ int main(int argc, char** argv) {
                     p2sel.confirmed = false;
                     if (matchMode == MATCH_MODE_ONLINE) {
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                     }
                     state = STATE_MAIN_MENU;
                     break;
@@ -1990,7 +2002,6 @@ int main(int argc, char** argv) {
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     if (matchMode == MATCH_MODE_ONLINE) {
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
                         state = STATE_MAIN_MENU;
@@ -2069,7 +2080,6 @@ int main(int argc, char** argv) {
                     if (frontend.onlineResultTimer <= 0.0f) {
                         frontend.onlineResultTimer = 0.0f;
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                         p1sel.confirmed = false;
                         p2sel.confirmed = false;
                         state = STATE_MAIN_MENU;
@@ -2079,7 +2089,6 @@ int main(int argc, char** argv) {
                 if (IsKeyPressed(KEY_ESCAPE)) {
                     if (matchMode == MATCH_MODE_ONLINE) {
                         LeaveOnlineMatch(&matchMode, &mpMenu);
-                        NetInit();
                     }
                     state = STATE_MAIN_MENU;
                     p1sel.confirmed = false;
