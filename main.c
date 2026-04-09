@@ -1676,8 +1676,9 @@ int main(int argc, char** argv) {
                 }
             }
 
-            if ((state == STATE_MULTIPLAYER || state == STATE_CHAR_SELECT || state == STATE_BATTLE ||
-                 state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) &&
+            if ((state == STATE_CHAR_SELECT || state == STATE_BATTLE ||
+                 state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER ||
+                 (state == STATE_MULTIPLAYER && mpMenu.authRequested)) &&
                 mpMenu.connectedToLobby && !gNetConnected) {
                 snprintf(mpMenu.statusText, sizeof(mpMenu.statusText), "Relay server disconnected.");
                 DisconnectMultiplayer(&matchMode, &mpMenu);
