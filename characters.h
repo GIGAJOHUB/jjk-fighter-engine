@@ -21,6 +21,10 @@ typedef enum {
     CHAR_TOJI   = 2,
     CHAR_YUTA   = 3,
     CHAR_YUJI   = 4,
+    CHAR_MEGUMI = 5,
+    CHAR_NANAMI = 6,
+    CHAR_NOBARA = 7,
+    CHAR_TODO   = 8,
     CHAR_COUNT
 } CharacterID;
 

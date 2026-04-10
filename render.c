@@ -329,11 +329,17 @@ static void DrawUltimateEffect(Fighter* f) {
             break;
         }
 
-        case ULT_DISMANTLE_CLEAVE:
-            for (int i = 0; i < 4; i++) {
-                float y = f->ultHitbox.y + 10.0f + i * 16.0f;
-                DrawLineEx((Vector2){ f->ultHitbox.x, y }, (Vector2){ f->ultHitbox.x + f->ultHitbox.width, y + 12.0f }, 3.0f, (Color){255, 100, 100, 220});
-            }
+        case ULT_FUGA:
+            DrawEllipse((int)(f->ultHitbox.x + f->ultHitbox.width * 0.5f), (int)(f->ultHitbox.y + f->ultHitbox.height * 0.5f),
+                        28.0f, 12.0f, ColorAlpha((Color){255, 120, 20, 255}, 0.3f));
+            DrawCircleV((Vector2){ f->ultHitbox.x + f->ultHitbox.width * 0.5f, f->ultHitbox.y + f->ultHitbox.height * 0.5f },
+                        10.0f, (Color){255, 170, 70, 240});
+            break;
+
+        case ULT_PURE_LOVE_BEAM:
+            DrawRectangleRounded(f->ultHitbox, 0.1f, 8, ColorAlpha((Color){225, 235, 255, 255}, 0.55f));
+            DrawRectangleRounded((Rectangle){ f->ultHitbox.x, f->ultHitbox.y + 12.0f, f->ultHitbox.width, f->ultHitbox.height - 24.0f },
+                                 0.1f, 8, ColorAlpha((Color){170, 220, 255, 255}, 0.65f));
             break;
 
         case ULT_BLACK_FLASH:
@@ -374,6 +380,12 @@ void DrawFighterBody(Fighter* f, bool isP1) {
         DrawRectangleRounded((Rectangle){ bx + (f->facingDir > 0 ? -18.0f : 18.0f), by + 4.0f, bw, bh }, 0.15f, 8, ghost);
     }
 
+    if (f->infinityActive) {
+        float repel = 1.0f + 0.15f * sinf((float)GetTime() * 8.0f);
+        DrawCircleLines((int)(bx + bw * 0.5f), (int)(by + bh * 0.45f), 34.0f * repel, ColorAlpha((Color){180, 235, 255, 255}, 0.8f));
+        DrawCircleLines((int)(bx + bw * 0.5f), (int)(by + bh * 0.45f), 46.0f * repel, ColorAlpha((Color){120, 200, 255, 255}, 0.45f));
+    }
+
     DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, f->bodyColor);
     DrawRectangleRounded((Rectangle){ bx + 5.0f, by + 5.0f, bw - 10.0f, bh * 0.38f }, 0.15f, 8, Lighten(f->bodyColor, 45));
     DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, Lighten(f->bodyColor, 85));
@@ -394,16 +406,14 @@ void DrawFighterBody(Fighter* f, bool isP1) {
         DrawRectangleRounded(slash, 0.2f, 8, ColorAlpha(f->isHeavenlyRestricted ? LIGHTGRAY : f->charData.ceColor, 0.5f));
     }
 
+    if (f->specialAnimFrames > 0) {
+        DrawRectangleRoundedLines((Rectangle){ bx - 10.0f, by - 10.0f, bw + 20.0f, bh + 20.0f },
+                                  0.18f, 8, ColorAlpha(f->charData.ceColor, 0.75f));
+    }
+
     if (f->blackFlashActive) {
         DrawRectangleRounded((Rectangle){ bx - 5.0f, by - 5.0f, bw + 10.0f, bh + 10.0f }, 0.16f, 8, (Color){12, 12, 12, 220});
         DrawRectangleRoundedLines((Rectangle){ bx - 5.0f, by - 5.0f, bw + 10.0f, bh + 10.0f }, 0.16f, 8, (Color){255, 205, 70, 220});
-    }
-
-    if (f->projectileActive) {
-        Vector2 p = { f->projectile.x + f->projectile.width * 0.5f, f->projectile.y + f->projectile.height * 0.5f };
-        DrawCircleV(p, 18.0f, ColorAlpha(f->charData.ceColor, 0.20f));
-        DrawCircleV(p, 10.0f, f->charData.ceColor);
-        DrawCircleLines((int)p.x, (int)p.y, 12.0f, WHITE);
     }
 
     DrawUltimateEffect(f);
@@ -440,6 +450,102 @@ void DrawFighterEffects(Fighter* f) {
     }
 }
 
+void DrawProjectiles(const Projectile* projectiles, int count) {
+    for (int i = 0; i < count; i++) {
+        const Projectile* p = &projectiles[i];
+        Vector2 center;
+        if (!p->active) continue;
+        center = (Vector2){ p->hitbox.x + p->hitbox.width * 0.5f, p->hitbox.y + p->hitbox.height * 0.5f };
+
+        switch (p->type) {
+            case PROJ_GOJO_RED:
+                DrawCircleV(center, 18.0f, ColorAlpha((Color){255, 70, 70, 255}, 0.2f));
+                DrawCircleV(center, 11.0f, (Color){255, 100, 100, 240});
+                break;
+            case PROJ_GOJO_BLUE:
+                DrawCircleV(center, 18.0f, ColorAlpha((Color){90, 160, 255, 255}, 0.24f));
+                DrawCircleV(center, 11.0f, (Color){110, 180, 255, 240});
+                break;
+            case PROJ_SUKUNA_DISMANTLE:
+                DrawLineEx((Vector2){ p->hitbox.x, p->hitbox.y }, (Vector2){ p->hitbox.x + p->hitbox.width, p->hitbox.y + p->hitbox.height },
+                           3.0f, (Color){255, 100, 100, 220});
+                break;
+            case PROJ_FUGA_ARROW:
+                DrawEllipse((int)center.x, (int)center.y, 20.0f, 8.0f, ColorAlpha((Color){255, 140, 20, 255}, 0.32f));
+                DrawCircleV(center, 9.0f, (Color){255, 180, 70, 245});
+                break;
+            case PROJ_CE_BLAST:
+            case PROJ_NONE:
+            default:
+                DrawCircleV(center, 16.0f, ColorAlpha(p->color, 0.20f));
+                DrawCircleV(center, 10.0f, p->color);
+                DrawCircleLines((int)center.x, (int)center.y, 12.0f, WHITE);
+                break;
+        }
+    }
+}
+
+static const char* AbilityRowText(const Fighter* f, bool isP1) {
+    switch (f->charData.id) {
+        case CHAR_GOJO:
+            return isP1 ? "[E] Blue | [R] Red | [F] Infinity | [X] Purple"
+                        : "[N4] Blue | [N5] Red | [N6] Infinity | [N7] Purple";
+        case CHAR_SUKUNA:
+            return isP1 ? "[E] Dismantle | [R] Cleave | [X] Fuga"
+                        : "[N4] Dismantle | [N5] Cleave | [N7] Fuga";
+        case CHAR_YUTA:
+            return isP1 ? "[E] Katana | [R] Rika | [X] Love Beam"
+                        : "[N4] Katana | [N5] Rika | [N7] Love Beam";
+        case CHAR_MEGUMI:
+            return isP1 ? "[E] Nue | [R] Dogs | [F] Domain | [X] Mahoraga"
+                        : "[N4] Nue | [N5] Dogs | [N6] Domain | [N7] Mahoraga";
+        case CHAR_NANAMI:
+            return isP1 ? "[E] Ratio | [R] Collapse | [F] Overtime | [X] Slash"
+                        : "[N4] Ratio | [N5] Collapse | [N6] Overtime | [N7] Slash";
+        case CHAR_NOBARA:
+            return isP1 ? "[E] Nail | [R] Resonance | [F] Hairpin | [X] Maximum"
+                        : "[N4] Nail | [N5] Resonance | [N6] Hairpin | [N7] Maximum";
+        case CHAR_TODO:
+            return isP1 ? "[E] Strike | [R] Swap | [F] Clap | [X] Tackle"
+                        : "[N4] Strike | [N5] Swap | [N6] Clap | [N7] Tackle";
+        case CHAR_YUJI:
+            return isP1 ? "[1] Hit | [Q] Dash | [X] Black Flash"
+                        : "[N1] Hit | [N0] Dash | [N7] Black Flash";
+        case CHAR_TOJI:
+            return isP1 ? "[1] Hit | [Q] Dash | [X] Assault"
+                        : "[N1] Hit | [N0] Dash | [N7] Assault";
+        default:
+            return isP1 ? "[1] Attack | [2] Heal | [3] Domain | [X] Ult"
+                        : "[N1] Attack | [N2] Heal | [N3] Domain | [N7] Ult";
+    }
+}
+
+static void DrawSpecialStatus(const Fighter* f, int x, int y, bool alignRight) {
+    char text[96];
+    if (f->charData.id == CHAR_MEGUMI) {
+        int w = 120;
+        int drawX = alignRight ? x - w : x;
+        DrawRectangle(drawX, y, w, 8, (Color){18, 20, 30, 220});
+        DrawRectangle(drawX, y, (int)(w * (f->specialMeter / f->maxSpecialMeter)), 8, (Color){90, 100, 255, 255});
+        DrawRectangleLines(drawX, y, w, 8, WHITE);
+        snprintf(text, sizeof(text), "SHADOW");
+        if (alignRight) {
+            int tw = (int)UiMeasure(text, 8.0f, 1.0f).x;
+            UiText(text, (Vector2){ (float)(x - tw), (float)(y - 12) }, 8.0f, 1.0f, WHITE);
+        } else {
+            UiText(text, (Vector2){ (float)x, (float)(y - 12) }, 8.0f, 1.0f, WHITE);
+        }
+    } else if (f->charData.id == CHAR_TODO) {
+        snprintf(text, sizeof(text), "CHARGES %d/%d", f->boogieCharges, 2);
+        if (alignRight) {
+            int tw = (int)UiMeasure(text, 8.0f, 1.0f).x;
+            UiText(text, (Vector2){ (float)(x - tw), (float)y }, 8.0f, 1.0f, (Color){255, 214, 118, 240});
+        } else {
+            UiText(text, (Vector2){ (float)x, (float)y }, 8.0f, 1.0f, (Color){255, 214, 118, 240});
+        }
+    }
+}
+
 static void DrawPremiumBar(float val, float maxVal, int x, int y, int w, int h,
                            Color fill, Color bg, bool alignRight) {
     int drawX = alignRight ? x - w : x;
@@ -456,6 +562,23 @@ static void DrawPremiumBar(float val, float maxVal, int x, int y, int w, int h,
     DrawRectangleLines(drawX, y, w, h, (Color){225, 225, 235, 180});
 }
 
+static void DrawGhostBar(float ghostVal, float val, float maxVal, int x, int y, int w, int h, bool alignRight) {
+    int drawX = alignRight ? x - w : x;
+    int ghostFilled = (int)((ghostVal / maxVal) * w);
+    int realFilled = (int)((val / maxVal) * w);
+    if (ghostFilled < realFilled) ghostFilled = realFilled;
+    DrawRectangle(drawX + realFilled, y, ghostFilled - realFilled, h, ColorAlpha((Color){255, 210, 90, 255}, 0.75f));
+    DrawRectangle(drawX, y, realFilled, h, WHITE);
+}
+
+static void DrawRoundIcons(int x, int y, int wins, bool alignRight) {
+    for (int i = 0; i < 2; i++) {
+        int px = alignRight ? x - i * 18 : x + i * 18;
+        DrawCircle(px, y, 5.0f, i < wins ? (Color){255, 214, 118, 255} : (Color){70, 70, 90, 255});
+        DrawCircleLines(px, y, 6.5f, WHITE);
+    }
+}
+
 static void DrawTraitLine(Fighter* f, int x, int y, bool alignRight) {
     char line[128] = "";
     if (f->charData.traits.hasSixEyes) strcat(line, "[SIX EYES] ");
@@ -468,54 +591,85 @@ static void DrawTraitLine(Fighter* f, int x, int y, bool alignRight) {
     UiText(line, (Vector2){ (float)(alignRight ? x - w : x), (float)y }, 10.0f, 1.0f, ColorAlpha(WHITE, 0.8f));
 }
 
-void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW) {
-    int barW = 300;
+void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW,
+             float roundTimer, int p1Rounds, int p2Rounds,
+             const char* bannerText, const char* subText, float bannerTimer) {
+    int screenH = GetScreenHeight();
+    int leftX = 24;
+    int rightX = screenW - 24;
+    int barW = 330;
+    int hpY = 18;
+    int ceY = 46;
 
-    UiText(p1->charData.name, (Vector2){42, 12}, 20.0f, 1.0f, p1->charData.bodyColor);
-    UiText(p1->charData.fullTitle, (Vector2){42, 34}, 12.0f, 1.0f, (Color){200, 205, 220, 210});
-    DrawPremiumBar(p1->hp, p1->maxHP, 42, 54, barW, 24, (Color){80, 230, 120, 255}, (Color){40, 18, 22, 220}, false);
-    DrawPremiumBar(p1->cursedEnergy, p1->maxCE, 42, 84, barW, 14, p1->charData.ceColor, (Color){18, 16, 28, 220}, false);
-    DrawTraitLine(p1, 42, 104, false);
+    DrawRectangle(0, 0, screenW, 96, ColorAlpha(BLACK, 0.36f));
+    DrawRectangleGradientV(0, 0, screenW, 96, ColorAlpha((Color){20, 14, 26, 255}, 0.9f), ColorAlpha(BLACK, 0.0f));
 
-    char p1Ult[128];
-    snprintf(p1Ult, sizeof(p1Ult), "ULT [%s]: %s", "X",
-             p1->ultUsed ? "USED" : (p1->ultReady || !p1->ultUsed ? p1->charData.ultimateName : "LOCKED"));
-    UiText(p1Ult, (Vector2){42, 118}, 11.0f, 1.0f, p1->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
-    if (p1->charData.id == CHAR_YUJI && !p1->ultUsed) {
-        char combo[32];
-        snprintf(combo, sizeof(combo), "Combo: %d / 3", p1->comboHits);
-        UiText(combo, (Vector2){42, 132}, 11.0f, 1.0f, (Color){255, 210, 120, 220});
+    DrawPremiumBar(p1->hp, p1->maxHP, leftX + 56, hpY, barW, 22, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, false);
+    DrawGhostBar(p1->ghostHP, p1->hp, p1->maxHP, leftX + 56, hpY, barW, 22, false);
+    DrawPremiumBar(p1->cursedEnergy, p1->maxCE, leftX + 56, ceY, barW, 10, p1->charData.ceColor, (Color){18, 16, 28, 220}, false);
+    DrawRectangle(leftX, hpY - 2, 44, 44, ColorAlpha(p1->charData.bodyColor, 0.9f));
+    DrawRectangleLines(leftX, hpY - 2, 44, 44, WHITE);
+    UiText(p1->charData.name, (Vector2){ (float)(leftX + 56), 66.0f }, 16.0f, 1.0f, WHITE);
+    DrawRoundIcons(leftX + 64, 88, p1Rounds, false);
+
+    DrawPremiumBar(p2->hp, p2->maxHP, rightX - 56, hpY, barW, 22, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, true);
+    DrawGhostBar(p2->ghostHP, p2->hp, p2->maxHP, rightX - 56, hpY, barW, 22, true);
+    DrawPremiumBar(p2->cursedEnergy, p2->maxCE, rightX - 56, ceY, barW, 10, p2->charData.ceColor, (Color){18, 16, 28, 220}, true);
+    DrawRectangle(rightX - 44, hpY - 2, 44, 44, ColorAlpha(p2->charData.bodyColor, 0.9f));
+    DrawRectangleLines(rightX - 44, hpY - 2, 44, 44, WHITE);
+    {
+        int nameW = (int)UiMeasure(p2->charData.name, 16.0f, 1.0f).x;
+        UiText(p2->charData.name, (Vector2){ (float)(rightX - 56 - nameW), 66.0f }, 16.0f, 1.0f, WHITE);
+    }
+    DrawRoundIcons(rightX - 64, 88, p2Rounds, true);
+
+    DrawTraitLine(p1, leftX + 56, 82, false);
+    DrawTraitLine(p2, rightX - 56, 82, true);
+    DrawSpecialStatus(p1, leftX + 56, 94, false);
+    DrawSpecialStatus(p2, rightX - 56, 94, true);
+
+    {
+        char timerText[32];
+        snprintf(timerText, sizeof(timerText), "%02d", (int)ceilf(roundTimer));
+        DrawRectangleRounded((Rectangle){ screenW * 0.5f - 44.0f, 10.0f, 88.0f, 42.0f }, 0.16f, 8, (Color){20, 18, 32, 235});
+        DrawRectangleRoundedLines((Rectangle){ screenW * 0.5f - 44.0f, 10.0f, 88.0f, 42.0f }, 0.16f, 8, WHITE);
+        {
+            int tw = (int)UiMeasure(timerText, 24.0f, 1.0f).x;
+            UiText(timerText, (Vector2){ (float)(screenW * 0.5f - tw * 0.5f), 18.0f }, 24.0f, 1.0f, (Color){255, 230, 140, 255});
+        }
+        if (domainActive) {
+            char timer[48];
+            snprintf(timer, sizeof(timer), "DOMAIN %.1f", domainTimer);
+            int dw = (int)UiMeasure(timer, 12.0f, 1.0f).x;
+            UiText(timer, (Vector2){ (float)(screenW * 0.5f - dw * 0.5f), 56.0f }, 12.0f, 1.0f, (Color){255, 240, 120, 240});
+        }
     }
 
-    int rightX = screenW - 42;
-    int p2NameW = (int)UiMeasure(p2->charData.name, 20.0f, 1.0f).x;
-    UiText(p2->charData.name, (Vector2){ (float)(rightX - p2NameW), 12.0f }, 20.0f, 1.0f, p2->charData.bodyColor);
-    int p2TitleW = (int)UiMeasure(p2->charData.fullTitle, 12.0f, 1.0f).x;
-    UiText(p2->charData.fullTitle, (Vector2){ (float)(rightX - p2TitleW), 34.0f }, 12.0f, 1.0f, (Color){200, 205, 220, 210});
-    DrawPremiumBar(p2->hp, p2->maxHP, rightX, 54, barW, 24, (Color){80, 230, 120, 255}, (Color){40, 18, 22, 220}, true);
-    DrawPremiumBar(p2->cursedEnergy, p2->maxCE, rightX, 84, barW, 14, p2->charData.ceColor, (Color){18, 16, 28, 220}, true);
-    DrawTraitLine(p2, rightX, 104, true);
-
-    char p2Ult[128];
-    snprintf(p2Ult, sizeof(p2Ult), "ULT [%s]: %s", "NUM4",
-             p2->ultUsed ? "USED" : (p2->ultReady || !p2->ultUsed ? p2->charData.ultimateName : "LOCKED"));
-    int p2UltW = (int)UiMeasure(p2Ult, 11.0f, 1.0f).x;
-    UiText(p2Ult, (Vector2){ (float)(rightX - p2UltW), 118.0f }, 11.0f, 1.0f, p2->ultUsed ? (Color){180, 110, 110, 220} : (Color){255, 220, 140, 220});
-    if (p2->charData.id == CHAR_YUJI && !p2->ultUsed) {
-        char combo[32];
-        snprintf(combo, sizeof(combo), "Combo: %d / 3", p2->comboHits);
-        int cw = (int)UiMeasure(combo, 11.0f, 1.0f).x;
-        UiText(combo, (Vector2){ (float)(rightX - cw), 132.0f }, 11.0f, 1.0f, (Color){255, 210, 120, 220});
+    UiText(AbilityRowText(p1, true), (Vector2){ 24.0f, 102.0f }, 9.0f, 1.0f, (Color){225, 230, 240, 220});
+    {
+        const char* p2Abilities = AbilityRowText(p2, false);
+        int aw = (int)UiMeasure(p2Abilities, 9.0f, 1.0f).x;
+        UiText(p2Abilities, (Vector2){ (float)(screenW - 24 - aw), 102.0f }, 9.0f, 1.0f, (Color){225, 230, 240, 220});
     }
 
-    const char* center = domainActive ? "DOMAIN ACTIVE" : "VS";
-    int cw = (int)UiMeasure(center, 26.0f, 1.0f).x;
-    UiText(center, (Vector2){ (float)(screenW / 2 - cw / 2), 24.0f }, 26.0f, 1.0f, (Color){230, 220, 255, 230});
-    if (domainActive) {
-        char timer[64];
-        snprintf(timer, sizeof(timer), "Window %.1fs", domainTimer);
-        int tw = (int)UiMeasure(timer, 18.0f, 1.0f).x;
-        UiText(timer, (Vector2){ (float)(screenW / 2 - tw / 2), 56.0f }, 18.0f, 1.0f, (Color){255, 240, 120, 240});
+    if (p1->comboDisplayTimer > 0.0f && p1->comboCounter >= 2) {
+        char combo[32];
+        snprintf(combo, sizeof(combo), "%d HIT!", p1->comboCounter);
+        UiText(combo, (Vector2){ screenW * 0.5f + 80.0f, 150.0f }, 18.0f, 1.0f, (Color){255, 220, 140, 255});
+    } else if (p2->comboDisplayTimer > 0.0f && p2->comboCounter >= 2) {
+        char combo[32];
+        snprintf(combo, sizeof(combo), "%d HIT!", p2->comboCounter);
+        UiText(combo, (Vector2){ screenW * 0.5f - 150.0f, 150.0f }, 18.0f, 1.0f, (Color){255, 220, 140, 255});
+    }
+
+    if (bannerTimer > 0.0f) {
+        int bw = (int)UiMeasure(bannerText, 34.0f, 1.0f).x;
+        DrawRectangle(0, screenH / 2 - 52, screenW, 104, ColorAlpha(BLACK, 0.5f));
+        UiText(bannerText, (Vector2){ (float)(screenW / 2 - bw * 0.5f), (float)(screenH / 2 - 26) }, 34.0f, 1.0f, (Color){255, 225, 140, 255});
+        if (subText != NULL && subText[0] != '\0') {
+            int sw = (int)UiMeasure(subText, 16.0f, 1.0f).x;
+            UiText(subText, (Vector2){ (float)(screenW / 2 - sw * 0.5f), (float)(screenH / 2 + 14) }, 16.0f, 1.0f, WHITE);
+        }
     }
 }
 

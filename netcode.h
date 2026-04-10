@@ -28,6 +28,9 @@ typedef struct {
     bool rct;
     bool domain;
     bool dodge;
+    bool ability1;
+    bool ability2;
+    bool ability3;
     bool ult;
 } NetInput;
 

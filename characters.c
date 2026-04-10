@@ -33,7 +33,7 @@ CharacterData GetCharacterData(CharacterID id) {
             d.projectileDamage = 34.0f;
             d.domainName       = "Malevolent Shrine";
             d.hasDomain        = true;
-            d.ultimateName     = "Dismantle + Cleave";
+            d.ultimateName     = "Fuga";
             d.traits.hasRCTEfficiency  = true;
             d.traits.rctHealMultiplier = 2.5f;
             d.bodyColor        = (Color){200, 40, 40, 255};
@@ -66,7 +66,7 @@ CharacterData GetCharacterData(CharacterID id) {
         case CHAR_TOJI:
             d.id               = CHAR_TOJI;
             d.name             = "TOJI";
-            d.fullTitle        = "Sorcerer Killer";
+            d.fullTitle        = "Heavenly Restriction";
             d.maxHP            = 440.0f;
             d.maxCE            = 0.0f;
             d.baseSpeed        = 9.5f;
@@ -93,7 +93,7 @@ CharacterData GetCharacterData(CharacterID id) {
             d.projectileDamage = 30.0f;
             d.domainName       = "Authentic Mutual Love";
             d.hasDomain        = true;
-            d.ultimateName     = "Copy Technique";
+            d.ultimateName     = "Pure Love Beam";
             d.traits.hasCopy   = true;
             d.bodyColor        = (Color){180, 100, 255, 255};
             d.ceColor          = (Color){220, 160, 255, 255};
@@ -122,8 +122,80 @@ CharacterData GetCharacterData(CharacterID id) {
             d.domainAccentColor= (Color){255, 80, 0, 255};
             break;
 
+        case CHAR_MEGUMI:
+            d.id               = CHAR_MEGUMI;
+            d.name             = "MEGUMI";
+            d.fullTitle        = "Ten Shadows";
+            d.maxHP            = 390.0f;
+            d.maxCE            = 310.0f;
+            d.baseSpeed        = 5.9f;
+            d.baseAttackDamage = 22.0f;
+            d.projectileDamage = 22.0f;
+            d.domainName       = "Chimera Shadow Garden";
+            d.hasDomain        = true;
+            d.ultimateName     = "Mahoraga";
+            d.bodyColor        = (Color){55, 80, 150, 255};
+            d.ceColor          = (Color){120, 140, 255, 255};
+            d.domainColor      = (Color){8, 10, 24, 255};
+            d.domainAccentColor= (Color){70, 110, 255, 255};
+            break;
+
+        case CHAR_NANAMI:
+            d.id               = CHAR_NANAMI;
+            d.name             = "NANAMI";
+            d.fullTitle        = "Grade 1 Sorcerer";
+            d.maxHP            = 430.0f;
+            d.maxCE            = 240.0f;
+            d.baseSpeed        = 5.1f;
+            d.baseAttackDamage = 26.0f;
+            d.projectileDamage = 0.0f;
+            d.domainName       = "None";
+            d.hasDomain        = false;
+            d.ultimateName     = "Overtime Slash";
+            d.bodyColor        = (Color){224, 198, 120, 255};
+            d.ceColor          = (Color){255, 220, 140, 255};
+            d.domainColor      = (Color){24, 18, 10, 255};
+            d.domainAccentColor= (Color){255, 215, 110, 255};
+            break;
+
+        case CHAR_NOBARA:
+            d.id               = CHAR_NOBARA;
+            d.name             = "NOBARA";
+            d.fullTitle        = "Straw Doll Technique";
+            d.maxHP            = 360.0f;
+            d.maxCE            = 260.0f;
+            d.baseSpeed        = 6.1f;
+            d.baseAttackDamage = 20.0f;
+            d.projectileDamage = 18.0f;
+            d.domainName       = "None";
+            d.hasDomain        = false;
+            d.ultimateName     = "Maximum Resonance";
+            d.bodyColor        = (Color){180, 95, 130, 255};
+            d.ceColor          = (Color){255, 140, 180, 255};
+            d.domainColor      = (Color){30, 10, 20, 255};
+            d.domainAccentColor= (Color){255, 160, 210, 255};
+            break;
+
+        case CHAR_TODO:
+            d.id               = CHAR_TODO;
+            d.name             = "TODO";
+            d.fullTitle        = "Boogie Woogie";
+            d.maxHP            = 470.0f;
+            d.maxCE            = 220.0f;
+            d.baseSpeed        = 5.7f;
+            d.baseAttackDamage = 30.0f;
+            d.projectileDamage = 0.0f;
+            d.domainName       = "None";
+            d.hasDomain        = false;
+            d.ultimateName     = "Ultimate Tackle";
+            d.bodyColor        = (Color){120, 80, 60, 255};
+            d.ceColor          = (Color){255, 170, 90, 255};
+            d.domainColor      = (Color){26, 16, 10, 255};
+            d.domainAccentColor= (Color){255, 150, 80, 255};
+            break;
+
         default:
-            d.id               = CHAR_YUJI;
+            d.id               = CHAR_TODO;
             d.name             = "UNKNOWN";
             d.fullTitle        = "Fallback";
             d.maxHP            = 100.0f;
