@@ -713,7 +713,7 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
     float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
     float offset = targetCenter - screenW * 0.5f;
-    float maxOffset = stripW - (float)screenW + 80.0f;
+    float maxOffset = stripW - ((float)screenW - 120.0f);
     if (maxOffset < 0.0f) maxOffset = 0.0f;
     offset = Clamp(offset, -80.0f, maxOffset);
     smoothedOffset += (offset - smoothedOffset) * 0.16f;
@@ -758,10 +758,10 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
         int uw = (int)UiMeasure(cd.ultimateName, 10.0f, 1.0f).x;
         UiText(cd.ultimateName, (Vector2){ x + slotW * 0.5f - uw * 0.5f, 336.0f + lift }, 10.0f, 1.0f, ColorAlpha(cd.ceColor, 0.95f));
 
-        if (p1Here) UiText(cpuMode ? "YOU" : "P1", (Vector2){ x + 18.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){120, 190, 255, 255});
-        if (p2Here) UiText(cpuMode ? "CPU" : "P2", (Vector2){ x + slotW - (cpuMode ? 54.0f : 42.0f), 108.0f + lift }, 12.0f, 1.0f, (Color){255, 130, 130, 255});
-        if (cpuMode && p1Here && focusIndex == 0) UiText("SELECTING", (Vector2){ x + 52.0f, 108.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
-        if (cpuMode && p2Here && focusIndex == 1) UiText("SELECTING", (Vector2){ x + slotW - 118.0f, 108.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
+        if (p1Here) UiText(cpuMode ? "YOU" : "P1", (Vector2){ x + 18.0f, 86.0f + lift }, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+        if (p2Here) UiText(cpuMode ? "CPU" : "P2", (Vector2){ x + slotW - (cpuMode ? 54.0f : 42.0f), 86.0f + lift }, 12.0f, 1.0f, (Color){255, 130, 130, 255});
+        if (cpuMode && p1Here && focusIndex == 0) UiText("SELECTING", (Vector2){ x + 52.0f, 86.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
+        if (cpuMode && p2Here && focusIndex == 1) UiText("SELECTING", (Vector2){ x + slotW - 118.0f, 86.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
     }
 
     UiText(cpuMode ? "A / D MOVE | TAB SWITCHES YOU / CPU | SPACE LOCKS | BACKSPACE UNLOCKS" : "P1: A / D + SPACE", (Vector2){38, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});

@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include "netcode.h"
 #include "render.h"
 #include <math.h>
@@ -76,6 +77,7 @@ typedef enum {
     STATE_MAIN_MENU = 0,
     STATE_ABOUT,
     STATE_CPU_DIFFICULTY,
+    STATE_KEYBINDS,
     STATE_MULTIPLAYER,
     STATE_CHAR_SELECT,
     STATE_BATTLE,
@@ -96,6 +98,28 @@ typedef enum {
     CPU_NORMAL,
     CPU_HARD
 } CpuDifficulty;
+
+typedef enum {
+    ACT_LEFT = 0,
+    ACT_RIGHT,
+    ACT_JUMP,
+    ACT_CROUCH,
+    ACT_ATTACK,
+    ACT_RCT,
+    ACT_DOMAIN,
+    ACT_DASH,
+    ACT_ABILITY1,
+    ACT_ABILITY2,
+    ACT_ABILITY3,
+    ACT_ULT,
+    ACT_COUNT
+} ControlAction;
+
+typedef struct {
+    KeyboardKey keys[ACT_COUNT];
+} ControlProfile;
+
+static ControlProfile gControls[2];
 
 typedef struct {
     int cursor;
@@ -148,6 +172,9 @@ typedef struct {
     int charSelectFocus;
     int cpuDifficultyCursor;
     float charSelectScroll;
+    int keybindCursor;
+    int keybindPlayer;
+    bool waitingForKeybind;
     bool signInOpen;
     float signInSavedTimer;
     float onlineResultTimer;
@@ -247,20 +274,92 @@ static void RetroText(const char* text, Vector2 pos, float fontSize, float spaci
     else DrawText(text, (int)pos.x, (int)pos.y, (int)fontSize, color);
 }
 
+static const char* ActionLabel(ControlAction action) {
+    static const char* labels[ACT_COUNT] = {
+        "Move Left", "Move Right", "Jump", "Crouch", "Positive Technique / Hit",
+        "RCT / Heal", "Domain Expansion", "Dash", "Ability 1", "Ability 2", "Ability 3", "Ultimate"
+    };
+    return labels[action];
+}
+
+static const char* KeyLabel(KeyboardKey key) {
+    switch (key) {
+        case KEY_A: return "A";
+        case KEY_D: return "D";
+        case KEY_W: return "W";
+        case KEY_LEFT_SHIFT: return "L-SHIFT";
+        case KEY_RIGHT_SHIFT: return "R-SHIFT";
+        case KEY_LEFT: return "LEFT";
+        case KEY_RIGHT: return "RIGHT";
+        case KEY_UP: return "UP";
+        case KEY_Q: return "Q";
+        case KEY_E: return "E";
+        case KEY_R: return "R";
+        case KEY_F: return "F";
+        case KEY_X: return "X";
+        case KEY_ONE: return "1";
+        case KEY_TWO: return "2";
+        case KEY_THREE: return "3";
+        case KEY_KP_0: return "NUM0";
+        case KEY_KP_1: return "NUM1";
+        case KEY_KP_2: return "NUM2";
+        case KEY_KP_3: return "NUM3";
+        case KEY_KP_4: return "NUM4";
+        case KEY_KP_5: return "NUM5";
+        case KEY_KP_6: return "NUM6";
+        case KEY_KP_7: return "NUM7";
+        case KEY_SPACE: return "SPACE";
+        case KEY_ENTER: return "ENTER";
+        default: return "?";
+    }
+}
+
+static void SetDefaultControls(void) {
+    gControls[0].keys[ACT_LEFT] = KEY_A;
+    gControls[0].keys[ACT_RIGHT] = KEY_D;
+    gControls[0].keys[ACT_JUMP] = KEY_W;
+    gControls[0].keys[ACT_CROUCH] = KEY_LEFT_SHIFT;
+    gControls[0].keys[ACT_ATTACK] = KEY_ONE;
+    gControls[0].keys[ACT_RCT] = KEY_TWO;
+    gControls[0].keys[ACT_DOMAIN] = KEY_THREE;
+    gControls[0].keys[ACT_DASH] = KEY_Q;
+    gControls[0].keys[ACT_ABILITY1] = KEY_E;
+    gControls[0].keys[ACT_ABILITY2] = KEY_R;
+    gControls[0].keys[ACT_ABILITY3] = KEY_F;
+    gControls[0].keys[ACT_ULT] = KEY_X;
+
+    gControls[1].keys[ACT_LEFT] = KEY_LEFT;
+    gControls[1].keys[ACT_RIGHT] = KEY_RIGHT;
+    gControls[1].keys[ACT_JUMP] = KEY_UP;
+    gControls[1].keys[ACT_CROUCH] = KEY_RIGHT_SHIFT;
+    gControls[1].keys[ACT_ATTACK] = KEY_KP_1;
+    gControls[1].keys[ACT_RCT] = KEY_KP_2;
+    gControls[1].keys[ACT_DOMAIN] = KEY_KP_3;
+    gControls[1].keys[ACT_DASH] = KEY_KP_0;
+    gControls[1].keys[ACT_ABILITY1] = KEY_KP_4;
+    gControls[1].keys[ACT_ABILITY2] = KEY_KP_5;
+    gControls[1].keys[ACT_ABILITY3] = KEY_KP_6;
+    gControls[1].keys[ACT_ULT] = KEY_KP_7;
+}
+
+static Rectangle KeybindRowRect(int index) {
+    return (Rectangle){ 118.0f, 132.0f + index * 28.0f, 724.0f, 22.0f };
+}
+
 static NetInput GatherPlayerOneControls(void) {
     NetInput input = {0};
-    input.left = IsKeyDown(KEY_A);
-    input.right = IsKeyDown(KEY_D);
-    input.jump = IsKeyDown(KEY_W);
-    input.crouch = IsKeyDown(KEY_LEFT_SHIFT);
-    input.attack = IsKeyDown(KEY_ONE);
-    input.rct = IsKeyDown(KEY_TWO);
-    input.domain = IsKeyDown(KEY_THREE);
-    input.dodge = IsKeyDown(KEY_Q);
-    input.ability1 = IsKeyDown(KEY_E);
-    input.ability2 = IsKeyDown(KEY_R);
-    input.ability3 = IsKeyDown(KEY_F);
-    input.ult = IsKeyDown(KEY_X);
+    input.left = IsKeyDown(gControls[0].keys[ACT_LEFT]);
+    input.right = IsKeyDown(gControls[0].keys[ACT_RIGHT]);
+    input.jump = IsKeyDown(gControls[0].keys[ACT_JUMP]);
+    input.crouch = IsKeyDown(gControls[0].keys[ACT_CROUCH]);
+    input.attack = IsKeyDown(gControls[0].keys[ACT_ATTACK]);
+    input.rct = IsKeyDown(gControls[0].keys[ACT_RCT]);
+    input.domain = IsKeyDown(gControls[0].keys[ACT_DOMAIN]);
+    input.dodge = IsKeyDown(gControls[0].keys[ACT_DASH]);
+    input.ability1 = IsKeyDown(gControls[0].keys[ACT_ABILITY1]);
+    input.ability2 = IsKeyDown(gControls[0].keys[ACT_ABILITY2]);
+    input.ability3 = IsKeyDown(gControls[0].keys[ACT_ABILITY3]);
+    input.ult = IsKeyDown(gControls[0].keys[ACT_ULT]);
     return input;
 }
 
@@ -1909,18 +2008,19 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
                          DomainClashState* clash) {
     bool actuallyStunned = (stunLock && !f->isHeavenlyRestricted) || f->hitStunFrames > 0;
     int playerId = isP1 ? 1 : 2;
-    int leftKey   = isP1 ? KEY_A          : KEY_LEFT;
-    int rightKey  = isP1 ? KEY_D          : KEY_RIGHT;
-    int jumpKey   = isP1 ? KEY_W          : KEY_UP;
-    int crouchKey = isP1 ? KEY_LEFT_SHIFT : KEY_RIGHT_SHIFT;
-    int atkKey    = isP1 ? KEY_ONE        : KEY_KP_1;
-    int rctKey    = isP1 ? KEY_TWO        : KEY_KP_2;
-    int domainKey = isP1 ? KEY_THREE      : KEY_KP_3;
-    int dodgeKey  = isP1 ? KEY_Q          : KEY_KP_0;
-    int ab1Key    = isP1 ? KEY_E          : KEY_KP_4;
-    int ab2Key    = isP1 ? KEY_R          : KEY_KP_5;
-    int ab3Key    = isP1 ? KEY_F          : KEY_KP_6;
-    int ultKey    = isP1 ? KEY_X          : KEY_KP_7;
+    int profile   = isP1 ? 0 : 1;
+    int leftKey   = gControls[profile].keys[ACT_LEFT];
+    int rightKey  = gControls[profile].keys[ACT_RIGHT];
+    int jumpKey   = gControls[profile].keys[ACT_JUMP];
+    int crouchKey = gControls[profile].keys[ACT_CROUCH];
+    int atkKey    = gControls[profile].keys[ACT_ATTACK];
+    int rctKey    = gControls[profile].keys[ACT_RCT];
+    int domainKey = gControls[profile].keys[ACT_DOMAIN];
+    int dodgeKey  = gControls[profile].keys[ACT_DASH];
+    int ab1Key    = gControls[profile].keys[ACT_ABILITY1];
+    int ab2Key    = gControls[profile].keys[ACT_ABILITY2];
+    int ab3Key    = gControls[profile].keys[ACT_ABILITY3];
+    int ultKey    = gControls[profile].keys[ACT_ULT];
     float spd     = f->speed;
     bool backHeld = false;
 
@@ -2378,9 +2478,24 @@ static Rectangle CpuDifficultyRowRect(int index) {
     return (Rectangle){ 300.0f, 188.0f + index * 52.0f, 360.0f, 36.0f };
 }
 
+static Rectangle CharSelectCardRect(int index, int p1Cursor, int p2Cursor) {
+    int slotW = 206;
+    int gap = 24;
+    float stripW = (float)(CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap);
+    float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
+    float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
+    float offset = targetCenter - SCREEN_W * 0.5f;
+    float maxOffset = stripW - ((float)SCREEN_W - 120.0f);
+    if (maxOffset < 0.0f) maxOffset = 0.0f;
+    offset = Clamp(offset, -80.0f, maxOffset);
+    float x = 60.0f - offset + index * (float)(slotW + gap);
+    float lift = (p1Cursor == index || p2Cursor == index) ? -10.0f : 0.0f;
+    return (Rectangle){ x, 102.0f + lift, (float)slotW, 296.0f };
+}
+
 static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool signInOpen, float signInSavedTimer) {
-    static const char* items[] = { "LOCAL", "COMPUTER", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
-    int count = 6;
+    static const char* items[] = { "LOCAL", "COMPUTER", "MULTIPLAYER", "CHARACTER SELECT", "KEYBINDS", "INTRODUCE US", "EXIT" };
+    int count = 7;
     DrawMenuBackground(video);
 
     DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
@@ -2439,6 +2554,34 @@ static void DrawCpuDifficultyMenu(const MenuVideo* video, int cursor) {
         RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f }, 18.0f, 1.0f, selected ? WHITE : (Color){210, 220, 235, 240});
     }
     RetroText("THE CPU USES FULL CHARACTER KITS AND PLAYER 1 CONTROLS STAY YOURS.", (Vector2){ 232, 382 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
+}
+
+static void DrawKeybindMenu(const MenuVideo* video, const FrontendState* frontend) {
+    DrawMenuBackground(video);
+    DrawPixelPanel((Rectangle){ 74, 44, 812, 430 }, (Color){16, 12, 26, 230}, (Color){255, 214, 118, 255});
+    RetroText("KEYBINDS", (Vector2){ 396, 66 }, 26.0f, 1.0f, WHITE);
+    RetroText(frontend->keybindPlayer == 0 ? "PLAYER 1" : "PLAYER 2", (Vector2){ 136, 72 }, 16.0f, 1.0f, (Color){120, 220, 255, 255});
+    RetroText("TAB SWITCHES PLAYER | ENTER/CLICK TO REBIND | ESC/BACK TO RETURN", (Vector2){ 164, 96 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
+    RetroText("GENERAL", (Vector2){ 118, 118 }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+    RetroText("CHARACTER KITS", (Vector2){ 118, 352 }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+
+    for (int i = 0; i < ACT_COUNT; i++) {
+        Rectangle row = KeybindRowRect(i);
+        bool selected = (i == frontend->keybindCursor);
+        DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){26, 28, 44, 210});
+        DrawRectangleLinesEx(row, 1.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 180});
+        RetroText(ActionLabel((ControlAction)i), (Vector2){ row.x + 10.0f, row.y + 5.0f }, 11.0f, 1.0f, WHITE);
+        RetroText(KeyLabel(gControls[frontend->keybindPlayer].keys[i]), (Vector2){ row.x + 560.0f, row.y + 5.0f }, 11.0f, 1.0f, (Color){120, 220, 255, 255});
+        RetroText("EDIT", (Vector2){ row.x + 662.0f, row.y + 5.0f }, 11.0f, 1.0f, (Color){255, 214, 118, 255});
+    }
+
+    RetroText("GOJO: BLUE / RED / INFINITY / PURPLE", (Vector2){ 118, 378 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    RetroText("SUKUNA: DISMANTLE / CLEAVE / FUGA", (Vector2){ 118, 396 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    RetroText("YUTA: KATANA / RIKA / PURE LOVE BEAM", (Vector2){ 118, 414 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    RetroText("MEGUMI / NANAMI / NOBARA / TODO SHARE ABILITY 1-3 + ULT BINDS", (Vector2){ 118, 432 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    DrawRectangleRec((Rectangle){ 700, 430, 120, 26 }, (Color){28, 34, 52, 220});
+    DrawRectangleLinesEx((Rectangle){ 700, 430, 120, 26 }, 2.0f, (Color){255, 214, 118, 255});
+    RetroText(frontend->waitingForKeybind ? "PRESS KEY" : "BACK", (Vector2){ frontend->waitingForKeybind ? 726.0f : 742.0f, 437.0f }, 12.0f, 1.0f, WHITE);
 }
 
 static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
@@ -2618,6 +2761,7 @@ int main(int argc, char** argv) {
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
     InitAudioDevice();
+    SetDefaultControls();
     NetInit();
     LoadRelayConfig();
 
@@ -2728,7 +2872,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_CPU_DIFFICULTY || state == STATE_MULTIPLAYER || state == STATE_PAUSE) {
+        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_CPU_DIFFICULTY || state == STATE_KEYBINDS || state == STATE_MULTIPLAYER || state == STATE_PAUSE) {
             UpdateMenuVideo(&menuVideo);
         }
         if (state == STATE_BATTLE || state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) {
@@ -2852,9 +2996,9 @@ int main(int argc, char** argv) {
                     break;
                 }
 
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 6;
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 5) % 6;
-                for (int i = 0; i < 6; i++) {
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 7;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 6) % 7;
+                for (int i = 0; i < 7; i++) {
                     if (CheckCollisionPointRec(mousePos, MainMenuRowRect(i))) {
                         frontend.cursor = i;
                         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2922,9 +3066,15 @@ int main(int argc, char** argv) {
                             state = STATE_CHAR_SELECT;
                             break;
                         case 4:
-                            state = STATE_ABOUT;
+                            frontend.keybindCursor = 0;
+                            frontend.keybindPlayer = 0;
+                            frontend.waitingForKeybind = false;
+                            state = STATE_KEYBINDS;
                             break;
                         case 5:
+                            state = STATE_ABOUT;
+                            break;
+                        case 6:
                             CloseWindow();
                             break;
                     }
@@ -2967,6 +3117,42 @@ int main(int argc, char** argv) {
                 } else if (activateIndex == 3) {
                     state = STATE_MAIN_MENU;
                 }
+                break;
+            }
+
+            case STATE_KEYBINDS: {
+                int clickedRow = -1;
+                Vector2 mousePos = GetMousePosition();
+                Rectangle backRect = { 700, 430, 120, 26 };
+                if (frontend.waitingForKeybind) {
+                    int pressed = GetKeyPressed();
+                    if (pressed != 0 && pressed != KEY_ESCAPE) {
+                        gControls[frontend.keybindPlayer].keys[frontend.keybindCursor] = (KeyboardKey)pressed;
+                        frontend.waitingForKeybind = false;
+                    } else if (IsKeyPressed(KEY_ESCAPE)) {
+                        frontend.waitingForKeybind = false;
+                    }
+                    break;
+                }
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    state = STATE_MAIN_MENU;
+                    break;
+                }
+                if (IsKeyPressed(KEY_TAB)) frontend.keybindPlayer = 1 - frontend.keybindPlayer;
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.keybindCursor = (frontend.keybindCursor + 1) % ACT_COUNT;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.keybindCursor = (frontend.keybindCursor + ACT_COUNT - 1) % ACT_COUNT;
+                for (int i = 0; i < ACT_COUNT; i++) {
+                    if (CheckCollisionPointRec(mousePos, KeybindRowRect(i))) {
+                        frontend.keybindCursor = i;
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) clickedRow = i;
+                    }
+                }
+                if (CheckCollisionPointRec(mousePos, backRect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    state = STATE_MAIN_MENU;
+                    break;
+                }
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) clickedRow = frontend.keybindCursor;
+                if (clickedRow >= 0) frontend.waitingForKeybind = true;
                 break;
             }
 
@@ -3127,16 +3313,41 @@ int main(int argc, char** argv) {
                         state = STATE_BATTLE;
                     }
                 } else if (matchMode == MATCH_MODE_CPU) {
+                    Vector2 mousePos = GetMousePosition();
+                    float wheel = GetMouseWheelMove();
                     SelectState* focusSel = (frontend.charSelectFocus == 0) ? &p1sel : &p2sel;
-                    if (IsKeyPressed(KEY_TAB)) frontend.charSelectFocus = 1 - frontend.charSelectFocus;
+                    if (IsKeyPressed(KEY_TAB) && p1sel.confirmed) frontend.charSelectFocus = 1 - frontend.charSelectFocus;
                     if (IsKeyPressed(KEY_A) && focusSel->cursor > 0 && !focusSel->confirmed) focusSel->cursor--;
                     if (IsKeyPressed(KEY_D) && focusSel->cursor < CHAR_COUNT - 1 && !focusSel->confirmed) focusSel->cursor++;
-                    if (IsKeyPressed(KEY_SPACE) && !focusSel->confirmed) {
-                        focusSel->selected = (CharacterID)focusSel->cursor;
-                        focusSel->confirmed = true;
+                    if (wheel < -0.1f && !focusSel->confirmed && focusSel->cursor < CHAR_COUNT - 1) focusSel->cursor++;
+                    if (wheel > 0.1f && !focusSel->confirmed && focusSel->cursor > 0) focusSel->cursor--;
+                    for (int i = 0; i < CHAR_COUNT; i++) {
+                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor);
+                        if (CheckCollisionPointRec(mousePos, card)) {
+                            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                                focusSel->cursor = i;
+                                if (focusSel->confirmed && frontend.charSelectFocus == 0) {
+                                    p1sel.confirmed = false;
+                                } else if (focusSel->confirmed && frontend.charSelectFocus == 1) {
+                                    p2sel.confirmed = false;
+                                }
+                            }
+                        }
                     }
                     if (IsKeyPressed(KEY_BACKSPACE)) {
-                        focusSel->confirmed = false;
+                        if (p2sel.confirmed) p2sel.confirmed = false;
+                        else p1sel.confirmed = false;
+                        frontend.charSelectFocus = p1sel.confirmed ? 1 : 0;
+                    }
+                    if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                        if (!p1sel.confirmed) {
+                            p1sel.selected = (CharacterID)p1sel.cursor;
+                            p1sel.confirmed = true;
+                            frontend.charSelectFocus = 1;
+                        } else if (!p2sel.confirmed) {
+                            p2sel.selected = (CharacterID)p2sel.cursor;
+                            p2sel.confirmed = true;
+                        }
                     }
                     p1sel.selected = (CharacterID)p1sel.cursor;
                     p2sel.selected = (CharacterID)p2sel.cursor;
@@ -3149,8 +3360,12 @@ int main(int argc, char** argv) {
                         state = STATE_BATTLE;
                     }
                 } else {
+                    Vector2 mousePos = GetMousePosition();
+                    float wheel = GetMouseWheelMove();
                     if (IsKeyPressed(KEY_A) && p1sel.cursor > 0) p1sel.cursor--;
                     if (IsKeyPressed(KEY_D) && p1sel.cursor < CHAR_COUNT - 1) p1sel.cursor++;
+                    if (wheel < -0.1f && p1sel.cursor < CHAR_COUNT - 1) p1sel.cursor++;
+                    if (wheel > 0.1f && p1sel.cursor > 0) p1sel.cursor--;
                     if (IsKeyPressed(KEY_SPACE) && !p1sel.confirmed) {
                         p1sel.selected = (CharacterID)p1sel.cursor;
                         p1sel.confirmed = true;
@@ -3160,6 +3375,13 @@ int main(int argc, char** argv) {
                     if (IsKeyPressed(KEY_ENTER) && !p2sel.confirmed) {
                         p2sel.selected = (CharacterID)p2sel.cursor;
                         p2sel.confirmed = true;
+                    }
+                    for (int i = 0; i < CHAR_COUNT; i++) {
+                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor);
+                        if (CheckCollisionPointRec(mousePos, card) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            if (!p1sel.confirmed) p1sel.cursor = i;
+                            else if (!p2sel.confirmed) p2sel.cursor = i;
+                        }
                     }
                     if (p1sel.confirmed && p2sel.confirmed) {
                         if (frontend.launchBattleAfterSelect) {
@@ -3323,6 +3545,10 @@ int main(int argc, char** argv) {
 
             case STATE_CPU_DIFFICULTY:
                 DrawCpuDifficultyMenu(&menuVideo, frontend.cpuDifficultyCursor);
+                break;
+
+            case STATE_KEYBINDS:
+                DrawKeybindMenu(&menuVideo, &frontend);
                 break;
 
             case STATE_MULTIPLAYER:
