@@ -53,6 +53,16 @@
 #define NET_RELAY_PORT        8999
 #define RELAY_CONFIG_PATH     "relay.cfg"
 #define PROFILE_PATH          "player_profile.txt"
+#define MAHORAGA_SPEED          4.2f
+#define MAHORAGA_ATTACK_RANGE  86.0f
+#define MAHORAGA_ATTACK_TIME    0.9f
+
+#define ADAPT_BASIC            (1u << 0)
+#define ADAPT_ABILITY1         (1u << 1)
+#define ADAPT_ABILITY2         (1u << 2)
+#define ADAPT_ABILITY3         (1u << 3)
+#define ADAPT_ULT              (1u << 4)
+#define ADAPT_PROJECTILE       (1u << 5)
 
 static char gRelayServerIP[64] = "127.0.0.1";
 #define ONLINE_RESULT_TIME      3.2f
@@ -65,6 +75,7 @@ static int gHitstopFrames = 0;
 typedef enum {
     STATE_MAIN_MENU = 0,
     STATE_ABOUT,
+    STATE_CPU_DIFFICULTY,
     STATE_MULTIPLAYER,
     STATE_CHAR_SELECT,
     STATE_BATTLE,
@@ -76,8 +87,15 @@ typedef enum {
 
 typedef enum {
     MATCH_MODE_LOCAL = 0,
+    MATCH_MODE_CPU,
     MATCH_MODE_ONLINE
 } MatchMode;
+
+typedef enum {
+    CPU_EASY = 0,
+    CPU_NORMAL,
+    CPU_HARD
+} CpuDifficulty;
 
 typedef struct {
     int cursor;
@@ -127,6 +145,9 @@ typedef struct {
     int pauseCursor;
     bool launchBattleAfterSelect;
     GameState pausedFromState;
+    int charSelectFocus;
+    int cpuDifficultyCursor;
+    float charSelectScroll;
     bool signInOpen;
     float signInSavedTimer;
     float onlineResultTimer;
@@ -247,6 +268,24 @@ static bool NetInputChanged(const NetInput* a, const NetInput* b) {
     return memcmp(a, b, sizeof(NetInput)) != 0;
 }
 
+static const char* CpuDifficultyLabel(CpuDifficulty difficulty) {
+    switch (difficulty) {
+        case CPU_EASY: return "EASY";
+        case CPU_NORMAL: return "NORMAL";
+        case CPU_HARD: return "HARD";
+        default: return "NORMAL";
+    }
+}
+
+static float CpuDifficultyAggro(CpuDifficulty difficulty) {
+    switch (difficulty) {
+        case CPU_EASY: return 0.45f;
+        case CPU_NORMAL: return 0.72f;
+        case CPU_HARD: return 0.94f;
+        default: return 0.72f;
+    }
+}
+
 static void LoadRelayConfig(void) {
     FILE* f = fopen(RELAY_CONFIG_PATH, "r");
     if (f == NULL) return;
@@ -315,6 +354,8 @@ static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     f.onGround             = true;
     f.boogieCharges        = BOOGIE_MAX_CHARGES;
     f.copiedUltSource      = CHAR_COUNT;
+    f.mahoragaMaxHP        = f.maxHP;
+    f.mahoragaHP           = f.maxHP;
     return f;
 }
 
@@ -658,6 +699,46 @@ static bool IsInfinityBlocking(const Fighter* attacker, Fighter* target, bool by
     return true;
 }
 
+static unsigned int AdaptMaskForHit(bool projectile, UltimateType ultType, int moveKind) {
+    if (ultType != ULT_NONE) return ADAPT_ULT;
+    if (projectile) return ADAPT_PROJECTILE;
+    if (moveKind == 1) return ADAPT_ABILITY1;
+    if (moveKind == 2) return ADAPT_ABILITY2;
+    if (moveKind == 3) return ADAPT_ABILITY3;
+    return ADAPT_BASIC;
+}
+
+static void SpinMahoragaWheel(Fighter* summoner, unsigned int mask) {
+    if (!summoner->mahoragaActive || summoner->mahoragaHP <= 0.0f || mask == 0u) return;
+    if ((summoner->mahoragaAdaptMask & mask) != 0u) return;
+    summoner->mahoragaAdaptMask |= mask;
+    summoner->mahoragaSpinFrames = 22;
+    summoner->mahoragaWheelAngle += 60.0f;
+    ParticleSpawnBurst((Vector2){ SCREEN_W * 0.5f, 86.0f }, 18, (Color){255, 245, 180, 255}, 4.2f, 0.5f, 4.0f, PARTICLE_SPARK);
+}
+
+static bool DamageMahoragaIfHit(Fighter* summoner, float damage, bool projectile, UltimateType ultType, int moveKind) {
+    if (!summoner->mahoragaActive || summoner->mahoragaHP <= 0.0f) return false;
+    unsigned int mask = AdaptMaskForHit(projectile, ultType, moveKind);
+    if ((summoner->mahoragaAdaptMask & mask) != 0u) {
+        ParticleSpawnBurst((Vector2){ summoner->mahoragaHitbox.x + summoner->mahoragaHitbox.width * 0.5f,
+                                      summoner->mahoragaHitbox.y + summoner->mahoragaHitbox.height * 0.5f },
+                           16, (Color){210, 240, 255, 255}, 3.2f, 0.35f, 3.8f, PARTICLE_SPARK);
+        return true;
+    }
+
+    summoner->mahoragaHP -= damage;
+    if (summoner->mahoragaHP <= 0.0f) {
+        summoner->mahoragaHP = 0.0f;
+        summoner->mahoragaActive = false;
+    }
+    SpinMahoragaWheel(summoner, mask);
+    ParticleSpawnBurst((Vector2){ summoner->mahoragaHitbox.x + summoner->mahoragaHitbox.width * 0.5f,
+                                  summoner->mahoragaHitbox.y + summoner->mahoragaHitbox.height * 0.5f },
+                       16, (Color){240, 240, 240, 255}, 3.8f, 0.35f, 4.0f, PARTICLE_HIT_BURST);
+    return true;
+}
+
 static void ClampHitboxX(Fighter* f) {
     if (f->hitbox.x < 0.0f) f->hitbox.x = 0.0f;
     if (f->hitbox.x > SCREEN_W - f->hitbox.width) f->hitbox.x = SCREEN_W - f->hitbox.width;
@@ -665,12 +746,32 @@ static void ClampHitboxX(Fighter* f) {
 
 static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, float displacement,
                            int stunFrames, bool bypassInfinity, bool dodgeable, bool pullsTarget,
-                           ParticleType particleType, int particleCount) {
+                           ParticleType particleType, int particleCount, bool projectileHit, int moveKind) {
     float damageScale = 1.0f;
-    float direction;
+    float direction = (float)attacker->facingDir;
+    bool blocking = false;
 
     if (dodgeable && target->isDodging && target->dodgeInvulFrames > 0) return false;
     if (IsInfinityBlocking(attacker, target, bypassInfinity, &damageScale)) return false;
+    if (target->mahoragaActive &&
+        ((projectileHit && fabsf((attacker->hitbox.x + attacker->hitbox.width * 0.5f) - (target->mahoragaHitbox.x + target->mahoragaHitbox.width * 0.5f)) < 220.0f) ||
+         (!projectileHit && fabsf((attacker->hitbox.x + attacker->hitbox.width * 0.5f) - (target->mahoragaHitbox.x + target->mahoragaHitbox.width * 0.5f)) < 120.0f))) {
+        if (DamageMahoragaIfHit(target, damage * damageScale, projectileHit, attacker->ultActive ? attacker->activeUlt : ULT_NONE, moveKind)) {
+            TriggerHitstop(HITSTOP_LIGHT);
+            return true;
+        }
+    }
+
+    blocking = target->isBlocking && !target->isHeavenlyRestricted && !bypassInfinity;
+    if (blocking) {
+        damage *= 0.08f;
+        displacement = 8.0f;
+        stunFrames = (stunFrames > 8) ? 8 : stunFrames;
+        ParticleSpawnBurst(
+            (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
+            10, (Color){150, 210, 255, 255}, 3.0f, 0.25f, 3.2f, PARTICLE_SPARK
+        );
+    }
 
     target->hp -= damage * damageScale;
     target->lastDamageTaken = damage * damageScale;
@@ -679,6 +780,11 @@ static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, flo
         if (target->specialMeter > target->maxSpecialMeter) target->specialMeter = target->maxSpecialMeter;
     }
     if (stunFrames > target->hitStunFrames) target->hitStunFrames = stunFrames;
+    target->knockbackVelX = direction * displacement * damageScale;
+    if (damage >= 55.0f || attacker->ultActive) {
+        target->isKnockedDown = true;
+        target->wakeupFrames = 40;
+    }
 
     if (displacement != 0.0f) {
         if (pullsTarget) {
@@ -723,8 +829,17 @@ static void DoMeleeHit(Fighter* attacker, Fighter* target) {
 
     if (attacker->charData.id == CHAR_TOJI) reach = 84.0f;
     if (attacker->charData.id == CHAR_NOBARA) reach = 56.0f;
+    if (!attacker->onGround) {
+        height = 62.0f;
+        verticalOffset = 34.0f;
+    } else if (attacker->isCrouching) {
+        height = 72.0f;
+        verticalOffset = -14.0f;
+    }
     atkBox.x = attacker->hitbox.x + (attacker->facingDir > 0 ? attacker->hitbox.width : -reach);
     atkBox.width = reach;
+    atkBox.y = attacker->hitbox.y + verticalOffset;
+    atkBox.height = height;
 
     if (attacker->attackLanded || attacker->attackFrames > ATTACK_ACTIVE_END || attacker->attackFrames < ATTACK_ACTIVE_START) return;
 
@@ -752,7 +867,7 @@ static void DoMeleeHit(Fighter* attacker, Fighter* target) {
 
         if (ApplyCombatHit(attacker, target, dmg, attacker->isHeavenlyRestricted ? 40.0f : 18.0f,
                            blackFlashProc ? 18 : 8, false, true, false,
-                           PARTICLE_HIT_BURST, blackFlashProc ? 20 : 10)) {
+                           PARTICLE_HIT_BURST, blackFlashProc ? 20 : 10, false, 0)) {
             RegisterYujiCombo(attacker);
         }
     }
@@ -806,7 +921,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             Rectangle katana = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -96.0f), f->hitbox.y + 14.0f, 96.0f, 54.0f };
             f->specialAnimFrames = 12;
             if (CheckCollisionRecs(katana, opponent->hurtbox)) {
-                ApplyCombatHit(f, opponent, 28.0f, 34.0f, 12, false, true, false, PARTICLE_SLASH_TRAIL, 16);
+                ApplyCombatHit(f, opponent, 28.0f, 34.0f, 12, false, true, false, PARTICLE_SLASH_TRAIL, 16, false, 1);
             }
             break;
         }
@@ -827,7 +942,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             f->specialAnimFrames = 18;
             if (CheckCollisionRecs(ratio, opponent->hurtbox)) {
                 float bonus = (opponent->cursedEnergy * 7.0f) / 3.0f;
-                ApplyCombatHit(f, opponent, 18.0f + bonus, 36.0f, 14, false, true, false, PARTICLE_SPARK, 22);
+                ApplyCombatHit(f, opponent, 18.0f + bonus, 36.0f, 14, false, true, false, PARTICLE_SPARK, 22, false, 1);
             }
             break;
         }
@@ -848,7 +963,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             f->specialAnimFrames = 16;
             if (CheckCollisionRecs(smash, opponent->hurtbox)) {
                 float damage = f->clapBuff ? 56.0f : 36.0f;
-                ApplyCombatHit(f, opponent, damage, 52.0f, 18, false, true, false, PARTICLE_HIT_BURST, 22);
+                ApplyCombatHit(f, opponent, damage, 52.0f, 18, false, true, false, PARTICLE_HIT_BURST, 22, false, 1);
                 f->clapBuff = false;
             }
             break;
@@ -878,7 +993,7 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             Rectangle cleave = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -76.0f), f->hitbox.y + 10.0f, 76.0f, 60.0f };
             f->specialAnimFrames = 14;
             if (HorizontalGap(f, opponent) < 82.0f && CheckCollisionRecs(cleave, opponent->hurtbox)) {
-                ApplyCombatHit(f, opponent, 46.0f, 62.0f, 14, false, true, false, PARTICLE_SLASH_TRAIL, 20);
+                ApplyCombatHit(f, opponent, 46.0f, 62.0f, 14, false, true, false, PARTICLE_SLASH_TRAIL, 20, false, 2);
             }
             break;
         }
@@ -890,7 +1005,7 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
                 f->cursedEnergy -= ceCost;
                 f->specialAnimFrames = 18;
                 if (CheckCollisionRecs(rika, opponent->hurtbox)) {
-                    ApplyCombatHit(f, opponent, 44.0f, 58.0f, 24, false, true, false, PARTICLE_HIT_BURST, 26);
+                    ApplyCombatHit(f, opponent, 44.0f, 58.0f, 24, false, true, false, PARTICLE_HIT_BURST, 26, false, 2);
                 }
             }
             break;
@@ -911,15 +1026,18 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             Rectangle collapse = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -110.0f), f->hitbox.y - 6.0f, 110.0f, 92.0f };
             f->specialAnimFrames = 18;
             if (CheckCollisionRecs(collapse, opponent->hurtbox)) {
-                ApplyCombatHit(f, opponent, 40.0f, 88.0f, 18, false, true, false, PARTICLE_SPARK, 28);
+                ApplyCombatHit(f, opponent, 40.0f, 88.0f, 18, false, true, false, PARTICLE_SPARK, 28, false, 2);
             }
             break;
         }
 
         case CHAR_NOBARA:
-            if (opponent->dollMarked) {
+            if (opponent->dollMarked && f->resonanceCooldown <= 0.0f) {
                 f->specialAnimFrames = 14;
-                ApplyCombatHit(f, opponent, f->lastDamageTaken > 0.0f ? f->lastDamageTaken : 24.0f, 0.0f, 12, true, false, false, PARTICLE_HIT_BURST, 18);
+                ApplyCombatHit(f, opponent, f->lastDamageTaken > 0.0f ? f->lastDamageTaken : 24.0f, 0.0f, 12, true, false, false, PARTICLE_HIT_BURST, 18, false, 2);
+                opponent->dollMarked = false;
+                opponent->dollTimer = 0.0f;
+                f->resonanceCooldown = 1.2f;
             }
             break;
 
@@ -1071,16 +1189,29 @@ static void StartUltimate(Fighter* user, Fighter* target) {
             break;
 
         case ULT_MAHORAGA:
-            user->ultDuration = 3.2f;
+            user->ultDuration = 999.0f;
             user->ultTimer = user->ultDuration;
-            user->ultSpeed = 4.0f * (float)user->facingDir;
-            user->ultHitbox = (Rectangle){
-                user->hitbox.x + (user->facingDir > 0 ? user->hitbox.width : -96.0f),
-                user->hitbox.y - 8.0f,
-                96.0f, 96.0f
+            user->ultSpeed = 0.0f;
+            user->mahoragaActive = true;
+            user->mahoragaHP = user->mahoragaMaxHP;
+            user->mahoragaHitbox = (Rectangle){
+                user->hitbox.x + (user->facingDir > 0 ? user->hitbox.width + 20.0f : -132.0f),
+                FLOOR_Y - 132.0f,
+                132.0f, 132.0f
             };
-            user->ultDamage = user->mahoragaAdapted ? 90.0f : 60.0f;
+            user->mahoragaAttackTimer = 0.0f;
+            user->mahoragaDecisionTimer = 0.0f;
+            user->mahoragaWheelAngle = 0.0f;
+            user->mahoragaSpinFrames = 18;
+            user->mahoragaAdaptMask = 0u;
+            user->ultHitbox = user->mahoragaHitbox;
+            user->ultDamage = 42.0f;
             user->specialMeter = 0.0f;
+            ParticleSpawnBurst(
+                (Vector2){ user->mahoragaHitbox.x + user->mahoragaHitbox.width * 0.5f, user->mahoragaHitbox.y + user->mahoragaHitbox.height * 0.5f },
+                52, (Color){235, 235, 255, 255}, 5.2f, 0.8f, 5.0f, PARTICLE_DOMAIN_SHARD
+            );
+            ShakeTrigger(15.0f, 0.45f);
             break;
 
         case ULT_OVERTIME_SLASH:
@@ -1258,6 +1389,14 @@ static void UpdateProjectiles(Fighter* p1, Fighter* p2) {
             continue;
         }
 
+        if (target->mahoragaActive && CheckCollisionRecs(proj->hitbox, target->mahoragaHitbox)) {
+            DamageMahoragaIfHit(target, proj->damage, true, ULT_NONE,
+                                (proj->type == PROJ_GOJO_BLUE || proj->type == PROJ_SUKUNA_DISMANTLE || proj->type == PROJ_MEGUMI_NUE || proj->type == PROJ_NOBARA_NAIL) ? 1 :
+                                (proj->type == PROJ_GOJO_RED || proj->type == PROJ_MEGUMI_DOG) ? 2 : 3);
+            proj->active = false;
+            continue;
+        }
+
         if (CheckCollisionRecs(proj->hitbox, target->hurtbox)) {
             if (proj->type == PROJ_FUGA_ARROW) {
                 TriggerFugaExplosion(attacker, target, center);
@@ -1266,7 +1405,9 @@ static void UpdateProjectiles(Fighter* p1, Fighter* p2) {
                                (proj->type == PROJ_GOJO_RED || proj->type == PROJ_NOBARA_HAIRPIN) ? 20 : 10, false, proj->dodgeable,
                                proj->pullsTarget,
                                (proj->type == PROJ_SUKUNA_DISMANTLE || proj->type == PROJ_NOBARA_NAIL) ? PARTICLE_SLASH_TRAIL : PARTICLE_HIT_BURST,
-                               proj->type == PROJ_GOJO_RED ? 28 : 16);
+                               proj->type == PROJ_GOJO_RED ? 28 : 16, true,
+                               (proj->type == PROJ_GOJO_BLUE || proj->type == PROJ_SUKUNA_DISMANTLE || proj->type == PROJ_MEGUMI_NUE || proj->type == PROJ_NOBARA_NAIL) ? 1 :
+                               (proj->type == PROJ_GOJO_RED || proj->type == PROJ_MEGUMI_DOG) ? 2 : 3);
                 if (proj->type == PROJ_NOBARA_NAIL) {
                     target->dollMarked = true;
                     target->dollTimer = 3.0f;
@@ -1328,7 +1469,7 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
                 if (user->beamTickTimer >= 0.12f) {
                     user->beamTickTimer = 0.0f;
                     if (CheckCollisionRecs(user->ultHitbox, target->hitbox)) {
-                        ApplyCombatHit(user, target, user->ultDamage, 18.0f, 8, false, false, false, PARTICLE_CE_MOTE, 10);
+                        ApplyCombatHit(user, target, user->ultDamage, 18.0f, 8, false, false, false, PARTICLE_CE_MOTE, 10, false, 0);
                         user->beamTicksApplied++;
                     }
                 }
@@ -1337,13 +1478,16 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
 
         case ULT_BLACK_FLASH:
         case ULT_HEAVENLY_ASSAULT:
-        case ULT_MAHORAGA:
         case ULT_ULTIMATE_TACKLE:
             user->hitbox.x += user->ultSpeed;
             if (user->hitbox.x < 0.0f) user->hitbox.x = 0.0f;
             if (user->hitbox.x > SCREEN_W - user->hitbox.width) user->hitbox.x = SCREEN_W - user->hitbox.width;
             user->ultHitbox.x = user->hitbox.x + (user->facingDir > 0 ? user->hitbox.width : -user->ultHitbox.width);
             user->ultHitbox.y = user->hitbox.y + 10.0f;
+            break;
+
+        case ULT_MAHORAGA:
+            user->ultHitbox = user->mahoragaHitbox;
             break;
 
         case ULT_OVERTIME_SLASH:
@@ -1362,7 +1506,7 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
          user->activeUlt == ULT_MAXIMUM_RESONANCE || user->activeUlt == ULT_ULTIMATE_TACKLE) &&
         CheckCollisionRecs(user->ultHitbox, target->hurtbox)) {
         if (user->activeUlt == ULT_HOLLOW_PURPLE) {
-            if (ApplyCombatHit(user, target, target->maxHP * 0.8f, 95.0f, 24, false, true, false, PARTICLE_HOLLOW_PURPLE, 60)) {
+            if (ApplyCombatHit(user, target, target->maxHP * 0.8f, 95.0f, 24, false, true, false, PARTICLE_HOLLOW_PURPLE, 60, false, 0)) {
                 user->ultHitApplied = true;
                 user->ultActive = false;
                 ShakeTrigger(18.0f, 0.6f);
@@ -1373,21 +1517,21 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
             user->ultHitApplied = true;
             user->ultActive = false;
         } else if (user->activeUlt == ULT_MAXIMUM_RESONANCE) {
-            ApplyCombatHit(user, target, user->ultDamage, 0.0f, 18, true, false, false, PARTICLE_BLACK_FLASH, 28);
+            ApplyCombatHit(user, target, user->ultDamage, 0.0f, 18, true, false, false, PARTICLE_BLACK_FLASH, 28, false, 0);
             user->ultHitApplied = true;
             user->ultActive = false;
             target->dollMarked = false;
             target->dollTimer = 0.0f;
         } else if (user->activeUlt == ULT_OVERTIME_SLASH) {
-            ApplyCombatHit(user, target, user->ultDamage, 90.0f, 24, false, true, false, PARTICLE_SPARK, 34);
+            ApplyCombatHit(user, target, user->ultDamage, 90.0f, 24, false, true, false, PARTICLE_SPARK, 34, false, 0);
             user->ultHitApplied = true;
             user->ultActive = false;
         } else if (user->activeUlt == ULT_ULTIMATE_TACKLE) {
-            ApplyCombatHit(user, target, user->ultDamage, 110.0f, 30, false, false, false, PARTICLE_HIT_BURST, 30);
+            ApplyCombatHit(user, target, user->ultDamage, 110.0f, 30, false, false, false, PARTICLE_HIT_BURST, 30, false, 0);
             user->ultHitApplied = true;
             user->ultActive = false;
         } else {
-            if (ApplyCombatHit(user, target, user->ultDamage, 88.0f, 20, false, true, false, PARTICLE_BLACK_FLASH, 34)) {
+            if (ApplyCombatHit(user, target, user->ultDamage, 88.0f, 20, false, true, false, PARTICLE_BLACK_FLASH, 34, false, 0)) {
                 user->ultHitApplied = true;
                 user->ultActive = false;
                 user->blackFlashActive = (user->activeUlt == ULT_BLACK_FLASH);
@@ -1399,8 +1543,11 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
         user->ultActive = false;
     }
 
-    if (user->activeUlt == ULT_MAHORAGA && !user->ultHitApplied && user->ultTimer <= 0.0f) {
-        user->mahoragaAdapted = true;
+    if (user->activeUlt == ULT_MAHORAGA) {
+        if (!user->mahoragaActive || user->mahoragaHP <= 0.0f) {
+            user->ultActive = false;
+        }
+        return;
     }
 
     if (user->ultTimer <= 0.0f || user->ultHitbox.x < -260.0f || user->ultHitbox.x > SCREEN_W + 260.0f) {
@@ -1408,11 +1555,149 @@ static void UpdateUltimate(Fighter* user, Fighter* target) {
     }
 }
 
+static void UpdateMahoraga(Fighter* summoner, Fighter* target) {
+    if (!summoner->mahoragaActive || summoner->mahoragaHP <= 0.0f) return;
+
+    float dt = GetFrameTime();
+    float targetCenter = target->hitbox.x + target->hitbox.width * 0.5f;
+    float ownCenter = summoner->mahoragaHitbox.x + summoner->mahoragaHitbox.width * 0.5f;
+    float delta = targetCenter - ownCenter;
+
+    summoner->mahoragaDecisionTimer += dt;
+    summoner->mahoragaAttackTimer -= dt;
+    if (summoner->mahoragaSpinFrames > 0) {
+        summoner->mahoragaSpinFrames--;
+        summoner->mahoragaWheelAngle += 18.0f;
+    }
+
+    if (fabsf(delta) > MAHORAGA_ATTACK_RANGE) {
+        float step = (delta > 0.0f ? 1.0f : -1.0f) * MAHORAGA_SPEED;
+        summoner->mahoragaHitbox.x += step;
+    } else if (summoner->mahoragaAttackTimer <= 0.0f) {
+        if (CheckCollisionRecs(summoner->mahoragaHitbox, target->hurtbox) ||
+            fabsf(delta) < MAHORAGA_ATTACK_RANGE + 18.0f) {
+            float damage = 34.0f + (summoner->mahoragaAdaptMask != 0u ? 12.0f : 0.0f);
+            ApplyCombatHit(summoner, target, damage, 64.0f, 18, true, false, false, PARTICLE_HIT_BURST, 26, false, 0);
+            summoner->mahoragaAttackTimer = MAHORAGA_ATTACK_TIME;
+            summoner->mahoragaAdapted = (summoner->mahoragaAdaptMask != 0u);
+        }
+    }
+
+    if (summoner->mahoragaHitbox.x < 0.0f) summoner->mahoragaHitbox.x = 0.0f;
+    if (summoner->mahoragaHitbox.x > SCREEN_W - summoner->mahoragaHitbox.width) {
+        summoner->mahoragaHitbox.x = SCREEN_W - summoner->mahoragaHitbox.width;
+    }
+    summoner->mahoragaHitbox.y = FLOOR_Y - summoner->mahoragaHitbox.height;
+    summoner->ultHitbox = summoner->mahoragaHitbox;
+}
+
+static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDifficulty difficulty,
+                              GameState state, int domainCasterPlayer, float domainTimer) {
+    NetInput input = {0};
+    float gap = HorizontalGap(cpu, player);
+    float aggro = CpuDifficultyAggro(difficulty);
+    bool lowHealth = cpu->hp < cpu->maxHP * (difficulty == CPU_HARD ? 0.45f : 0.30f);
+    bool fullCe = cpu->maxCE > 0.0f && cpu->cursedEnergy >= cpu->maxCE * 0.9f;
+    bool enemyUlting = player->ultActive || player->activeUlt != ULT_NONE;
+    bool canDomainCounter = (state == STATE_DOMAIN && domainTimer > 0.6f && domainCasterPlayer != 0);
+
+    if (cpu->hitStunFrames > 0 || cpu->isKnockedDown) return input;
+
+    if (player->hitbox.x + player->hitbox.width * 0.5f < cpu->hitbox.x + cpu->hitbox.width * 0.5f) {
+        input.left = true;
+    } else {
+        input.right = true;
+    }
+
+    if (gap > (difficulty == CPU_EASY ? 240.0f : 180.0f)) {
+        input.left = (player->hitbox.x < cpu->hitbox.x);
+        input.right = !input.left;
+    } else if (gap < 68.0f && difficulty != CPU_EASY) {
+        input.left = (player->hitbox.x > cpu->hitbox.x);
+        input.right = !input.left;
+    } else {
+        input.left = false;
+        input.right = false;
+    }
+
+    if (enemyUlting && gap < 180.0f) input.dodge = true;
+    if (lowHealth && cpu->cursedEnergy >= CalcRCTCost(cpu) && gap > 150.0f) input.rct = true;
+    if (canDomainCounter && cpu->hasDomain && cpu->cursedEnergy >= CalcCECost(cpu, DOMAIN_CE_COST)) input.domain = true;
+    if (state == STATE_BATTLE && fullCe && gap > 120.0f && cpu->hasDomain && aggro > 0.65f) input.domain = true;
+    if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.ability3 = true;
+
+    if (!cpu->ultUsed) {
+        switch (cpu->charData.id) {
+            case CHAR_GOJO:
+                if (cpu->cursedEnergy >= cpu->maxCE - 0.5f && gap > 150.0f && aggro > 0.7f) input.ult = true;
+                break;
+            case CHAR_SUKUNA:
+                if (cpu->cursedEnergy >= GetCharacterData(CHAR_SUKUNA).maxCE * 0.5f && gap > 110.0f) input.ult = true;
+                break;
+            case CHAR_YUTA:
+                if (gap > 90.0f && cpu->cursedEnergy >= GetUltimateCost(ResolveCopiedUltSource(cpu, player), cpu)) input.ult = true;
+                break;
+            case CHAR_MEGUMI:
+                if (cpu->specialMeter >= cpu->maxSpecialMeter && !cpu->mahoragaActive) input.ult = true;
+                break;
+            case CHAR_NANAMI:
+                if (cpu->passiveTimer >= OVERTIME_THRESHOLD) input.ult = true;
+                break;
+            case CHAR_NOBARA:
+                if (player->dollMarked && cpu->hp > cpu->maxHP * 0.5f) input.ult = true;
+                break;
+            case CHAR_TODO:
+            case CHAR_YUJI:
+            case CHAR_TOJI:
+                if (gap < 130.0f) input.ult = true;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (gap < 90.0f) {
+        input.attack = true;
+        if (difficulty != CPU_EASY && GetRandomValue(0, 100) < (int)(aggro * 70.0f)) input.ability2 = true;
+        if (difficulty == CPU_HARD && GetRandomValue(0, 100) < 28) input.ability1 = true;
+    } else if (gap < 180.0f) {
+        if (GetRandomValue(0, 100) < (int)(aggro * 65.0f)) input.ability1 = true;
+        if (GetRandomValue(0, 100) < (difficulty == CPU_HARD ? 35 : 16)) input.ability2 = true;
+    } else {
+        if (GetRandomValue(0, 100) < (int)(aggro * 55.0f)) input.attack = true;
+        if (GetRandomValue(0, 100) < (int)(aggro * 50.0f)) input.ability1 = true;
+    }
+
+    if (!cpu->onGround && difficulty != CPU_EASY && gap < 120.0f) input.attack = true;
+    if (player->onGround && gap < 110.0f && player->velY < -4.0f) input.crouch = true;
+
+    return input;
+}
+
 static void UpdateAttackCooldown(Fighter* f) {
     f->passiveTimer += GetFrameTime();
 
+    if (f->knockbackVelX != 0.0f) {
+        f->hitbox.x += f->knockbackVelX;
+        f->knockbackVelX *= 0.85f;
+        if (fabsf(f->knockbackVelX) < 0.35f) f->knockbackVelX = 0.0f;
+        ClampHitboxX(f);
+    }
+
     if (f->hitStunFrames > 0) {
         f->hitStunFrames--;
+    }
+
+    if (f->isKnockedDown) {
+        if (f->wakeupFrames > 0) {
+            f->wakeupFrames--;
+            f->isCrouching = true;
+            f->hitbox.height = 42.0f;
+        } else {
+            f->isKnockedDown = false;
+            f->dodgeInvulFrames = 6;
+            f->hitbox.height = 90.0f;
+        }
     }
 
     if (f->dodgeInvulFrames > 0) {
@@ -1485,6 +1770,11 @@ static void UpdateAttackCooldown(Fighter* f) {
             f->dollTimer = 0.0f;
             f->dollMarked = false;
         }
+    }
+
+    if (f->resonanceCooldown > 0.0f) {
+        f->resonanceCooldown -= GetFrameTime();
+        if (f->resonanceCooldown < 0.0f) f->resonanceCooldown = 0.0f;
     }
 
     if (f->ghostHP > f->hp) {
@@ -1632,6 +1922,7 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     int ab3Key    = isP1 ? KEY_F          : KEY_KP_6;
     int ultKey    = isP1 ? KEY_X          : KEY_KP_7;
     float spd     = f->speed;
+    bool backHeld = false;
 
     if (f->dodgeCooldown > 0) f->dodgeCooldown--;
 
@@ -1657,6 +1948,10 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     }
 
     if (actuallyStunned) return;
+    if (f->isKnockedDown) return;
+
+    backHeld = (opponent->hitbox.x > f->hitbox.x) ? IsKeyDown(leftKey) : IsKeyDown(rightKey);
+    f->isBlocking = backHeld && !f->isAttacking && !f->ultActive && !f->isDodging;
 
     if (IsKeyPressed(ab1Key)) UseAbility1(f, opponent, isP1);
     if (IsKeyPressed(ab2Key)) UseAbility2(f, opponent, isP1);
@@ -1700,6 +1995,9 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
         f->isAttacking  = true;
         f->attackFrames = 14;
         f->attackLanded = false;
+        if (!f->onGround) {
+            f->attackFrames = 12;
+        }
 
         if (forceMelee) {
             DoMeleeHit(f, opponent);
@@ -1739,6 +2037,7 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     bool actuallyStunned = (stunLock && !f->isHeavenlyRestricted) || f->hitStunFrames > 0;
     int playerId = isP1 ? 1 : 2;
     float spd = f->speed;
+    bool backHeld = false;
     bool pressedDomain = input->domain && !prevInput->domain;
     bool pressedUlt = input->ult && !prevInput->ult;
     bool pressedAb1 = input->ability1 && !prevInput->ability1;
@@ -1773,6 +2072,10 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     }
 
     if (actuallyStunned) return;
+    if (f->isKnockedDown) return;
+
+    backHeld = (opponent->hitbox.x > f->hitbox.x) ? input->left : input->right;
+    f->isBlocking = backHeld && !f->isAttacking && !f->ultActive && !f->isDodging;
 
     if (pressedAb1) UseAbility1(f, opponent, isP1);
     if (pressedAb2) UseAbility2(f, opponent, isP1);
@@ -1816,6 +2119,9 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
         f->isAttacking = true;
         f->attackFrames = 14;
         f->attackLanded = false;
+        if (!f->onGround) {
+            f->attackFrames = 12;
+        }
 
         if (forceMelee) {
             DoMeleeHit(f, opponent);
@@ -1903,7 +2209,8 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
                                 float* domainTimer, DomainClashState* clash,
                                 const NetInput* p1Input, const NetInput* p1Prev,
                                 const NetInput* p2Input, const NetInput* p2Prev,
-                                RoundState* round) {
+                                RoundState* round, bool cpuMode, CpuDifficulty cpuDifficulty,
+                                NetInput* cpuPrevInput) {
     float p1Regen = CE_REGEN_RATE * (p1->charData.traits.hasCopy ? 2.0f : 1.0f);
     float p2Regen = CE_REGEN_RATE * (p2->charData.traits.hasCopy ? 2.0f : 1.0f);
     bool canAct = true;
@@ -1942,7 +2249,12 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     bool p2Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 1);
 
     if (canAct) {
-        if (p1Input != NULL && p1Prev != NULL && p2Input != NULL && p2Prev != NULL) {
+        if (cpuMode && p1Input != NULL && p1Prev != NULL && cpuPrevInput != NULL) {
+            NetInput cpuInput = BuildCpuInput(p2, p1, cpuDifficulty, *state, *domainCasterPlayer, *domainTimer);
+            ProcessNetworkInput(p1, p2, p1Stun, true, p1Input, p1Prev, state, domainCasterPlayer, domainTimer, clash);
+            ProcessNetworkInput(p2, p1, p2Stun, false, &cpuInput, cpuPrevInput, state, domainCasterPlayer, domainTimer, clash);
+            *cpuPrevInput = cpuInput;
+        } else if (p1Input != NULL && p1Prev != NULL && p2Input != NULL && p2Prev != NULL) {
             ProcessNetworkInput(p1, p2, p1Stun, true, p1Input, p1Prev, state, domainCasterPlayer, domainTimer, clash);
             ProcessNetworkInput(p2, p1, p2Stun, false, p2Input, p2Prev, state, domainCasterPlayer, domainTimer, clash);
         } else {
@@ -1957,6 +2269,8 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     UpdateProjectiles(p1, p2);
     UpdateUltimate(p1, p2);
     UpdateUltimate(p2, p1);
+    UpdateMahoraga(p1, p2);
+    UpdateMahoraga(p2, p1);
     UpdateAttackCooldown(p1);
     UpdateAttackCooldown(p2);
 
@@ -2049,7 +2363,7 @@ static void DrawPixelPanel(Rectangle panel, Color fill, Color border) {
 }
 
 static Rectangle MainMenuRowRect(int index) {
-    return (Rectangle){ 294.0f, 196.0f + index * 44.0f, 372.0f, 32.0f };
+    return (Rectangle){ 280.0f, 178.0f + index * 40.0f, 400.0f, 30.0f };
 }
 
 static Rectangle MultiplayerRowRect(int index) {
@@ -2060,9 +2374,13 @@ static Rectangle PauseMenuRowRect(int index) {
     return (Rectangle){ 334.0f, 214.0f + index * 34.0f, 290.0f, 26.0f };
 }
 
+static Rectangle CpuDifficultyRowRect(int index) {
+    return (Rectangle){ 300.0f, 188.0f + index * 52.0f, 360.0f, 36.0f };
+}
+
 static void DrawMainMenu(const MenuVideo* video, int cursor, const char* username, bool signInOpen, float signInSavedTimer) {
-    static const char* items[] = { "LOCAL", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
-    int count = 5;
+    static const char* items[] = { "LOCAL", "COMPUTER", "MULTIPLAYER", "CHARACTER SELECT", "INTRODUCE US", "EXIT" };
+    int count = 6;
     DrawMenuBackground(video);
 
     DrawPixelPanel((Rectangle){ 170, 38, 620, 96 }, (Color){14, 10, 22, 225}, (Color){255, 214, 118, 255});
@@ -2076,7 +2394,7 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
         RetroText(greet, (Vector2){ 44, 98 }, 16.0f, 1.0f, (Color){255, 214, 118, 255});
     }
 
-    DrawPixelPanel((Rectangle){ 240, 146, 480, 292 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
+    DrawPixelPanel((Rectangle){ 228, 146, 504, 308 }, (Color){18, 14, 30, 225}, (Color){130, 185, 255, 255});
 
     for (int i = 0; i < count; i++) {
         Rectangle row = MainMenuRowRect(i);
@@ -2089,8 +2407,8 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
                   16.0f, 1.0f, selected ? WHITE : (Color){210, 210, 230, 240});
     }
 
-    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 430 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
-    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 450 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("UP / DOWN OR W / S TO MOVE", (Vector2){ 284, 438 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
+    RetroText("ENTER / SPACE TO SELECT", (Vector2){ 308, 458 }, 12.0f, 1.0f, (Color){220, 220, 235, 240});
 
     if (signInOpen) {
         DrawRectangle(0, 0, SCREEN_W, SCREEN_H, ColorAlpha(BLACK, 0.55f));
@@ -2104,6 +2422,23 @@ static void DrawMainMenu(const MenuVideo* video, int cursor, const char* usernam
             RetroText("SIGNED IN", (Vector2){ 450, 206 }, 11.0f, 1.0f, (Color){255, 230, 120, 255});
         }
     }
+}
+
+static void DrawCpuDifficultyMenu(const MenuVideo* video, int cursor) {
+    static const char* items[] = { "EASY", "NORMAL", "HARD", "BACK" };
+    DrawMenuBackground(video);
+    DrawPixelPanel((Rectangle){ 216, 88, 528, 340 }, (Color){16, 12, 28, 232}, (Color){255, 214, 118, 255});
+    RetroText("COMPUTER BATTLE", (Vector2){ 308, 118 }, 28.0f, 1.0f, WHITE);
+    RetroText("PICK THE CPU STYLE", (Vector2){ 360, 152 }, 14.0f, 1.0f, (Color){120, 220, 255, 255});
+    for (int i = 0; i < 4; i++) {
+        Rectangle row = CpuDifficultyRowRect(i);
+        bool selected = (i == cursor);
+        DrawRectangleRec(row, selected ? (Color){60, 90, 145, 220} : (Color){34, 28, 52, 205});
+        DrawRectangleLinesEx(row, 2.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 220});
+        Vector2 size = RetroMeasure(items[i], 18.0f, 1.0f);
+        RetroText(items[i], (Vector2){ row.x + row.width * 0.5f - size.x * 0.5f, row.y + 7.0f }, 18.0f, 1.0f, selected ? WHITE : (Color){210, 220, 235, 240});
+    }
+    RetroText("THE CPU USES FULL CHARACTER KITS AND PLAYER 1 CONTROLS STAY YOURS.", (Vector2){ 232, 382 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
 }
 
 static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
@@ -2298,6 +2633,9 @@ int main(int argc, char** argv) {
     bool gojoPortraitLoaded = false;
     frontend.cursor = 0;
     frontend.pauseCursor = 0;
+    frontend.cpuDifficultyCursor = 1;
+    frontend.charSelectFocus = 0;
+    frontend.charSelectScroll = 0.0f;
     frontend.launchBattleAfterSelect = false;
     frontend.pausedFromState = STATE_BATTLE;
     frontend.signInOpen = false;
@@ -2360,6 +2698,7 @@ int main(int argc, char** argv) {
 
     GameState state = STATE_MAIN_MENU;
     MatchMode matchMode = MATCH_MODE_LOCAL;
+    CpuDifficulty cpuDifficulty = CPU_NORMAL;
     SelectState p1sel = { 0, CHAR_SUKUNA, false };
     SelectState p2sel = { 4, CHAR_YUJI, false };
     p1sel.selected = CHAR_SUKUNA;
@@ -2378,6 +2717,7 @@ int main(int argc, char** argv) {
     NetInput remotePrevInput = {0};
     NetInput localNetInput = {0};
     NetInput localNetPrevInput = {0};
+    NetInput cpuPrevInput = {0};
 
     while (!WindowShouldClose()) {
         if (musicLoaded) {
@@ -2388,7 +2728,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_MULTIPLAYER || state == STATE_PAUSE) {
+        if (state == STATE_MAIN_MENU || state == STATE_ABOUT || state == STATE_CPU_DIFFICULTY || state == STATE_MULTIPLAYER || state == STATE_PAUSE) {
             UpdateMenuVideo(&menuVideo);
         }
         if (state == STATE_BATTLE || state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) {
@@ -2512,9 +2852,9 @@ int main(int argc, char** argv) {
                     break;
                 }
 
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 5;
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 4) % 5;
-                for (int i = 0; i < 5; i++) {
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cursor = (frontend.cursor + 1) % 6;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cursor = (frontend.cursor + 5) % 6;
+                for (int i = 0; i < 6; i++) {
                     if (CheckCollisionPointRec(mousePos, MainMenuRowRect(i))) {
                         frontend.cursor = i;
                         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -2531,6 +2871,7 @@ int main(int argc, char** argv) {
                     switch (activateIndex) {
                         case 0:
                             matchMode = MATCH_MODE_LOCAL;
+                            frontend.charSelectFocus = 0;
                             if (HasConfirmedRoster(&p1sel, &p2sel)) {
                                 ResetRoundState(&round);
                                 StartNextRound(&round, &p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
@@ -2541,6 +2882,16 @@ int main(int argc, char** argv) {
                             }
                             break;
                         case 1:
+                            matchMode = MATCH_MODE_CPU;
+                            frontend.cpuDifficultyCursor = (int)cpuDifficulty;
+                            frontend.charSelectFocus = 0;
+                            p1sel.confirmed = false;
+                            p2sel.confirmed = false;
+                            p2sel.cursor = GetRandomValue(0, CHAR_COUNT - 1);
+                            p2sel.selected = (CharacterID)p2sel.cursor;
+                            state = STATE_CPU_DIFFICULTY;
+                            break;
+                        case 2:
                             if (mpMenu.connectedToLobby || gNetConnected) {
                                 DisconnectMultiplayer(&matchMode, &mpMenu);
                             }
@@ -2564,15 +2915,16 @@ int main(int argc, char** argv) {
                             }
                             state = STATE_MULTIPLAYER;
                             break;
-                        case 2:
+                        case 3:
                             matchMode = MATCH_MODE_LOCAL;
                             frontend.launchBattleAfterSelect = false;
+                            frontend.charSelectFocus = 0;
                             state = STATE_CHAR_SELECT;
                             break;
-                        case 3:
+                        case 4:
                             state = STATE_ABOUT;
                             break;
-                        case 4:
+                        case 5:
                             CloseWindow();
                             break;
                     }
@@ -2586,6 +2938,37 @@ int main(int argc, char** argv) {
                     state = STATE_MAIN_MENU;
                 }
                 break;
+
+            case STATE_CPU_DIFFICULTY: {
+                int activateIndex = -1;
+                Vector2 mousePos = GetMousePosition();
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    state = STATE_MAIN_MENU;
+                    break;
+                }
+                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.cpuDifficultyCursor = (frontend.cpuDifficultyCursor + 1) % 4;
+                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.cpuDifficultyCursor = (frontend.cpuDifficultyCursor + 3) % 4;
+                for (int i = 0; i < 4; i++) {
+                    if (CheckCollisionPointRec(mousePos, CpuDifficultyRowRect(i))) {
+                        frontend.cpuDifficultyCursor = i;
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) activateIndex = i;
+                    }
+                }
+                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) activateIndex = frontend.cpuDifficultyCursor;
+                if (activateIndex == 0 || activateIndex == 1 || activateIndex == 2) {
+                    cpuDifficulty = (CpuDifficulty)activateIndex;
+                    frontend.launchBattleAfterSelect = true;
+                    frontend.charSelectFocus = 0;
+                    p1sel.confirmed = false;
+                    p2sel.confirmed = false;
+                    p2sel.cursor = GetRandomValue(0, CHAR_COUNT - 1);
+                    p2sel.selected = (CharacterID)p2sel.cursor;
+                    state = STATE_CHAR_SELECT;
+                } else if (activateIndex == 3) {
+                    state = STATE_MAIN_MENU;
+                }
+                break;
+            }
 
             case STATE_MULTIPLAYER:
                 {
@@ -2740,6 +3123,29 @@ int main(int argc, char** argv) {
                         memset(&remotePrevInput, 0, sizeof(remotePrevInput));
                         memset(&localNetInput, 0, sizeof(localNetInput));
                         memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
+                        memset(&cpuPrevInput, 0, sizeof(cpuPrevInput));
+                        state = STATE_BATTLE;
+                    }
+                } else if (matchMode == MATCH_MODE_CPU) {
+                    SelectState* focusSel = (frontend.charSelectFocus == 0) ? &p1sel : &p2sel;
+                    if (IsKeyPressed(KEY_TAB)) frontend.charSelectFocus = 1 - frontend.charSelectFocus;
+                    if (IsKeyPressed(KEY_A) && focusSel->cursor > 0 && !focusSel->confirmed) focusSel->cursor--;
+                    if (IsKeyPressed(KEY_D) && focusSel->cursor < CHAR_COUNT - 1 && !focusSel->confirmed) focusSel->cursor++;
+                    if (IsKeyPressed(KEY_SPACE) && !focusSel->confirmed) {
+                        focusSel->selected = (CharacterID)focusSel->cursor;
+                        focusSel->confirmed = true;
+                    }
+                    if (IsKeyPressed(KEY_BACKSPACE)) {
+                        focusSel->confirmed = false;
+                    }
+                    p1sel.selected = (CharacterID)p1sel.cursor;
+                    p2sel.selected = (CharacterID)p2sel.cursor;
+                    if (p1sel.confirmed && p2sel.confirmed) {
+                        ResetRoundState(&round);
+                        StartNextRound(&round, &p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                        memset(&localNetInput, 0, sizeof(localNetInput));
+                        memset(&localNetPrevInput, 0, sizeof(localNetPrevInput));
+                        memset(&cpuPrevInput, 0, sizeof(cpuPrevInput));
                         state = STATE_BATTLE;
                     }
                 } else {
@@ -2759,6 +3165,7 @@ int main(int argc, char** argv) {
                         if (frontend.launchBattleAfterSelect) {
                             ResetRoundState(&round);
                             StartNextRound(&round, &p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
+                            memset(&cpuPrevInput, 0, sizeof(cpuPrevInput));
                             state = STATE_BATTLE;
                         } else {
                             state = STATE_MAIN_MENU;
@@ -2792,16 +3199,23 @@ int main(int argc, char** argv) {
                     NetSendInput(localNetInput);
                     if (mpMenu.localPlayerIndex == 0) {
                         SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
-                                            &localNetInput, &localNetPrevInput, &remoteInput, &remotePrevInput, &round);
+                                            &localNetInput, &localNetPrevInput, &remoteInput, &remotePrevInput, &round,
+                                            false, cpuDifficulty, &cpuPrevInput);
                     } else {
                         SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
-                                            &remoteInput, &remotePrevInput, &localNetInput, &localNetPrevInput, &round);
+                                            &remoteInput, &remotePrevInput, &localNetInput, &localNetPrevInput, &round,
+                                            false, cpuDifficulty, &cpuPrevInput);
                     }
                     localNetPrevInput = localNetInput;
                     remotePrevInput = remoteInput;
                 } else {
+                    localNetInput = GatherPlayerOneControls();
                     SimulateBattleFrame(&p1, &p2, &state, &domainCasterPlayer, &domainTimer, &clash,
-                                        NULL, NULL, NULL, NULL, &round);
+                                        matchMode == MATCH_MODE_CPU ? &localNetInput : NULL,
+                                        matchMode == MATCH_MODE_CPU ? &localNetPrevInput : NULL,
+                                        NULL, NULL, &round,
+                                        matchMode == MATCH_MODE_CPU, cpuDifficulty, &cpuPrevInput);
+                    localNetPrevInput = localNetInput;
                 }
                 if (matchMode == MATCH_MODE_ONLINE && state == STATE_GAME_OVER && frontend.onlineResultTimer <= 0.0f) {
                     bool p1Won = (p2.hp <= 0.0f);
@@ -2907,6 +3321,10 @@ int main(int argc, char** argv) {
                 DrawAboutScreen(&menuVideo);
                 break;
 
+            case STATE_CPU_DIFFICULTY:
+                DrawCpuDifficultyMenu(&menuVideo, frontend.cpuDifficultyCursor);
+                break;
+
             case STATE_MULTIPLAYER:
                 DrawMultiplayerMenu(&menuVideo, &mpMenu);
                 break;
@@ -2914,7 +3332,9 @@ int main(int argc, char** argv) {
             case STATE_CHAR_SELECT:
                 DrawCharSelectScreen(p1sel.cursor, p2sel.cursor,
                                      p1sel.confirmed, p2sel.confirmed,
-                                     SCREEN_W, SCREEN_H);
+                                     SCREEN_W, SCREEN_H, matchMode == MATCH_MODE_CPU,
+                                     frontend.charSelectFocus,
+                                     matchMode == MATCH_MODE_CPU ? CpuDifficultyLabel(cpuDifficulty) : "VERSUS");
                 break;
 
             case STATE_BATTLE:
@@ -2971,7 +3391,9 @@ int main(int argc, char** argv) {
             case STATE_GAME_OVER: {
                 const char* winTxt = (matchMode == MATCH_MODE_ONLINE && frontend.onlineResultText[0] != '\0')
                     ? frontend.onlineResultText
-                    : ((p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!");
+                    : ((matchMode == MATCH_MODE_CPU)
+                        ? ((p2.hp <= 0.0f) ? "YOU WIN!" : "COMPUTER WINS!")
+                        : ((p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!"));
                 Color winCol = (p2.hp <= 0.0f) ? p1.charData.bodyColor : p2.charData.bodyColor;
                 DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);

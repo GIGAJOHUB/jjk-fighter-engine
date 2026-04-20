@@ -79,7 +79,7 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
              const char* bannerText, const char* subText, float bannerTimer);
 void DrawCharSelectScreen(int p1Cursor, int p2Cursor,
                           bool p1Confirmed, bool p2Confirmed,
-                          int screenW, int screenH);
+                          int screenW, int screenH, bool cpuMode, int focusIndex, const char* modeLabel);
 void DrawBattleBackground(int screenW, int screenH);
 void DrawGameOverOverlay(const char* winnerText, Color winnerColor, int screenW, int screenH);
 

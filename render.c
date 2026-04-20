@@ -429,6 +429,17 @@ void DrawFighterBody(Fighter* f, bool isP1) {
         int sw = MeasureText(txt, 12);
         DrawText(txt, (int)(bx + bw * 0.5f - sw * 0.5f), (int)(by - 38.0f), 12, (Color){255, 210, 100, 230});
     }
+
+    if (f->mahoragaActive && f->mahoragaHP > 0.0f) {
+        Rectangle m = f->mahoragaHitbox;
+        DrawEllipse((int)(m.x + m.width * 0.5f), (int)(FLOOR_Y + 10.0f), 54.0f, 14.0f, (Color){0, 0, 0, 95});
+        DrawRectangleRounded(m, 0.2f, 8, ColorAlpha((Color){215, 215, 225, 255}, 0.92f));
+        DrawRectangleRounded((Rectangle){ m.x + 10.0f, m.y + 10.0f, m.width - 20.0f, m.height * 0.30f }, 0.18f, 8, ColorAlpha((Color){245, 245, 255, 255}, 0.75f));
+        DrawRectangleRoundedLines(m, 0.2f, 8, (Color){255, 245, 210, 255});
+        DrawCircleLines((int)(m.x + m.width * 0.5f), (int)(m.y - 14.0f), 15.0f, (Color){255, 240, 180, 255});
+        DrawLineEx((Vector2){ m.x + m.width * 0.5f, m.y - 14.0f }, (Vector2){ m.x + m.width * 0.5f + cosf(DEG2RAD * f->mahoragaWheelAngle) * 12.0f, m.y - 14.0f + sinf(DEG2RAD * f->mahoragaWheelAngle) * 12.0f }, 2.0f, (Color){255, 240, 180, 255});
+        UiText("MAHORAGA", (Vector2){ m.x + 10.0f, m.y + m.height + 8.0f }, 10.0f, 1.0f, (Color){245, 245, 255, 255});
+    }
 }
 
 void DrawFighterEffects(Fighter* f) {
@@ -645,11 +656,23 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
         }
     }
 
-    UiText(AbilityRowText(p1, true), (Vector2){ 24.0f, 102.0f }, 9.0f, 1.0f, (Color){225, 230, 240, 220});
+    UiText(AbilityRowText(p1, true), (Vector2){ 24.0f, 102.0f }, 12.0f, 1.0f, (Color){235, 238, 245, 235});
     {
         const char* p2Abilities = AbilityRowText(p2, false);
-        int aw = (int)UiMeasure(p2Abilities, 9.0f, 1.0f).x;
-        UiText(p2Abilities, (Vector2){ (float)(screenW - 24 - aw), 102.0f }, 9.0f, 1.0f, (Color){225, 230, 240, 220});
+        int aw = (int)UiMeasure(p2Abilities, 12.0f, 1.0f).x;
+        UiText(p2Abilities, (Vector2){ (float)(screenW - 24 - aw), 102.0f }, 12.0f, 1.0f, (Color){235, 238, 245, 235});
+    }
+
+    if (p1->mahoragaActive && p1->mahoragaHP > 0.0f) {
+        UiText("MAHORAGA", (Vector2){ screenW * 0.5f - 152.0f, 86.0f }, 12.0f, 1.0f, (Color){240, 240, 255, 255});
+        DrawPremiumBar(p1->mahoragaHP, p1->mahoragaMaxHP, screenW * 0.5f - 60, 84, 120, 10, (Color){230, 230, 245, 255}, (Color){32, 30, 46, 220}, false);
+        DrawCircleLines((int)(screenW * 0.5f), 68, 18.0f, (Color){255, 240, 180, 255});
+        DrawLineEx((Vector2){ screenW * 0.5f, 68.0f }, (Vector2){ screenW * 0.5f + cosf(DEG2RAD * p1->mahoragaWheelAngle) * 16.0f, 68.0f + sinf(DEG2RAD * p1->mahoragaWheelAngle) * 16.0f }, 2.0f, (Color){255, 240, 180, 255});
+    } else if (p2->mahoragaActive && p2->mahoragaHP > 0.0f) {
+        UiText("MAHORAGA", (Vector2){ screenW * 0.5f + 34.0f, 86.0f }, 12.0f, 1.0f, (Color){240, 240, 255, 255});
+        DrawPremiumBar(p2->mahoragaHP, p2->mahoragaMaxHP, screenW * 0.5f + 60, 84, 120, 10, (Color){230, 230, 245, 255}, (Color){32, 30, 46, 220}, true);
+        DrawCircleLines((int)(screenW * 0.5f), 68, 18.0f, (Color){255, 240, 180, 255});
+        DrawLineEx((Vector2){ screenW * 0.5f, 68.0f }, (Vector2){ screenW * 0.5f + cosf(DEG2RAD * p2->mahoragaWheelAngle) * 16.0f, 68.0f + sinf(DEG2RAD * p2->mahoragaWheelAngle) * 16.0f }, 2.0f, (Color){255, 240, 180, 255});
     }
 
     if (p1->comboDisplayTimer > 0.0f && p1->comboCounter >= 2) {
@@ -674,7 +697,8 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
 }
 
 void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2Confirmed,
-                          int screenW, int screenH) {
+                          int screenW, int screenH, bool cpuMode, int focusIndex, const char* modeLabel) {
+    static float smoothedOffset = 0.0f;
     DrawRectangleGradientV(0, 0, screenW, screenH, (Color){5, 3, 16, 255}, (Color){22, 10, 38, 255});
     DrawStars(screenW, screenH, (Color){150, 170, 255, 255}, 4.0f);
 
@@ -692,7 +716,8 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     float maxOffset = stripW - (float)screenW + 80.0f;
     if (maxOffset < 0.0f) maxOffset = 0.0f;
     offset = Clamp(offset, -80.0f, maxOffset);
-    float startX = 60.0f - offset;
+    smoothedOffset += (offset - smoothedOffset) * 0.16f;
+    float startX = 60.0f - smoothedOffset;
 
     DrawRectangle(0, 82, screenW, 330, (Color){0, 0, 0, 58});
     DrawLine(0, 412, screenW, 412, (Color){255, 214, 118, 120});
@@ -733,15 +758,17 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
         int uw = (int)UiMeasure(cd.ultimateName, 10.0f, 1.0f).x;
         UiText(cd.ultimateName, (Vector2){ x + slotW * 0.5f - uw * 0.5f, 336.0f + lift }, 10.0f, 1.0f, ColorAlpha(cd.ceColor, 0.95f));
 
-        if (p1Here) UiText("P1", (Vector2){ x + 18.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){120, 190, 255, 255});
-        if (p2Here) UiText("P2", (Vector2){ x + slotW - 42.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){255, 130, 130, 255});
+        if (p1Here) UiText(cpuMode ? "YOU" : "P1", (Vector2){ x + 18.0f, 108.0f + lift }, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+        if (p2Here) UiText(cpuMode ? "CPU" : "P2", (Vector2){ x + slotW - (cpuMode ? 54.0f : 42.0f), 108.0f + lift }, 12.0f, 1.0f, (Color){255, 130, 130, 255});
+        if (cpuMode && p1Here && focusIndex == 0) UiText("SELECTING", (Vector2){ x + 52.0f, 108.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
+        if (cpuMode && p2Here && focusIndex == 1) UiText("SELECTING", (Vector2){ x + slotW - 118.0f, 108.0f + lift }, 10.0f, 1.0f, (Color){255, 214, 118, 255});
     }
 
-    UiText("P1: A / D + SPACE", (Vector2){70, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});
-    UiText("P2: LEFT / RIGHT + ENTER", (Vector2){548, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){255, 130, 130, 255});
-    UiText("RETRO FIGHTER STRIP SCROLLS WITH YOUR CURSOR", (Vector2){242, (float)(screenH - 44)}, 10.0f, 1.0f, (Color){255, 214, 118, 240});
-    if (p1Confirmed) UiText("PLAYER 1 LOCKED", (Vector2){70, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){120, 190, 255, 255});
-    if (p2Confirmed) UiText("PLAYER 2 LOCKED", (Vector2){694, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){255, 130, 130, 255});
+    UiText(cpuMode ? "A / D MOVE | TAB SWITCHES YOU / CPU | SPACE LOCKS | BACKSPACE UNLOCKS" : "P1: A / D + SPACE", (Vector2){38, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){120, 190, 255, 255});
+    UiText(cpuMode ? modeLabel : "P2: LEFT / RIGHT + ENTER", (Vector2){548, (float)(screenH - 68)}, 14.0f, 1.0f, (Color){255, 130, 130, 255});
+    UiText("RETRO FIGHTER STRIP GLIDES WITH YOUR CURSOR", (Vector2){252, (float)(screenH - 44)}, 10.0f, 1.0f, (Color){255, 214, 118, 240});
+    if (p1Confirmed) UiText(cpuMode ? "PLAYER LOCKED" : "PLAYER 1 LOCKED", (Vector2){70, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){120, 190, 255, 255});
+    if (p2Confirmed) UiText(cpuMode ? "CPU LOCKED" : "PLAYER 2 LOCKED", (Vector2){694, (float)(screenH - 24)}, 12.0f, 1.0f, (Color){255, 130, 130, 255});
 }
 
 void DrawBattleBackground(int screenW, int screenH) {

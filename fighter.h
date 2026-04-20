@@ -80,6 +80,10 @@ typedef struct Fighter {
     int             attackFrames;
     bool            attackLanded;
     int             hitStunFrames;
+    float           knockbackVelX;
+    bool            isBlocking;
+    bool            isKnockedDown;
+    int             wakeupFrames;
 
     bool            isDodging;
     int             dodgeFrames;
@@ -101,6 +105,7 @@ typedef struct Fighter {
     bool            mahoragaAdapted;
     bool            dollMarked;
     float           dollTimer;
+    float           resonanceCooldown;
     float           lastDamageTaken;
     float           ratioBonusDamage;
     float           wallBounceVelocity;
@@ -124,6 +129,15 @@ typedef struct Fighter {
     int             comboHits;
     float           comboTimer;
     CharacterID     copiedUltSource;
+    bool            mahoragaActive;
+    Rectangle       mahoragaHitbox;
+    float           mahoragaHP;
+    float           mahoragaMaxHP;
+    float           mahoragaAttackTimer;
+    float           mahoragaDecisionTimer;
+    float           mahoragaWheelAngle;
+    int             mahoragaSpinFrames;
+    unsigned int    mahoragaAdaptMask;
 
     Color           bodyColor;
     const char*     name;
