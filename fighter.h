@@ -32,6 +32,16 @@ typedef enum {
     PROJ_MAHORAGA
 } ProjectileType;
 
+typedef enum {
+    VISUAL_EVENT_NONE = 0,
+    VISUAL_EVENT_GOJO_BLUE,
+    VISUAL_EVENT_GOJO_RED,
+    VISUAL_EVENT_GOJO_INFINITY,
+    VISUAL_EVENT_GOJO_PURPLE,
+    VISUAL_EVENT_GOJO_DOMAIN_CAST,
+    VISUAL_EVENT_GOJO_DOMAIN_COUNTER
+} FighterVisualEvent;
+
 #define MAX_PROJECTILES 32
 
 typedef struct {
@@ -115,6 +125,12 @@ typedef struct Fighter {
     int             roundWins;
     int             comboCounter;
     float           comboDisplayTimer;
+    float           prevX;
+    float           crouchRecoverTimer;
+    float           landingRecoverTimer;
+    FighterVisualEvent visualEvent;
+    float           visualEventTimer;
+    float           visualEventDuration;
 
     bool            ultUsed;
     bool            ultActive;

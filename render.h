@@ -72,7 +72,7 @@ void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,
 
 void DrawArena(int screenW, int screenH, float floorY);
 void DrawProjectiles(const Projectile* projectiles, int count);
-void DrawFighterBody(Fighter* f, bool isP1);
+void DrawFighterBody(Fighter* f, bool isP1, float introProgress, bool domainCast, bool domainCounter);
 void DrawFighterEffects(Fighter* f);
 void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW,
              float roundTimer, int p1Rounds, int p2Rounds,

@@ -2,6 +2,7 @@
 #include "raymath.h"
 #include "netcode.h"
 #include "render.h"
+#include "character_gojo_sprite.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -455,7 +456,14 @@ static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     f.copiedUltSource      = CHAR_COUNT;
     f.mahoragaMaxHP        = f.maxHP;
     f.mahoragaHP           = f.maxHP;
+    f.prevX                = startX;
     return f;
+}
+
+static void TriggerVisualEvent(Fighter* f, FighterVisualEvent event, float duration) {
+    f->visualEvent = event;
+    f->visualEventTimer = duration;
+    f->visualEventDuration = duration;
 }
 
 static void UpdateFighterBoxes(Fighter* f) {
@@ -988,6 +996,8 @@ static void ToggleInfinity(Fighter* f) {
     if (!f->infinityActive && f->cursedEnergy < 12.0f) return;
     f->infinityActive = !f->infinityActive;
     f->specialAnimFrames = 18;
+    if (f->infinityActive) TriggerVisualEvent(f, VISUAL_EVENT_GOJO_INFINITY, 0.45f);
+    else f->visualEvent = VISUAL_EVENT_NONE;
 }
 
 static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
@@ -1002,6 +1012,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
                                 (Vector2){ (float)f->facingDir * 6.0f, 0.0f }, 20.0f, 3.2f, 70.0f, true, true, 0.0f, 0.0f,
                                 (Color){110, 180, 255, 255});
                 f->specialAnimFrames = 14;
+                TriggerVisualEvent(f, VISUAL_EVENT_GOJO_BLUE, 0.35f);
             }
             break;
 
@@ -1085,6 +1096,7 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
                                 (Vector2){ (float)f->facingDir * 13.5f, 0.0f }, 40.0f, 1.7f, 120.0f, false, true, 0.0f, 0.0f,
                                 (Color){255, 90, 90, 255});
                 f->specialAnimFrames = 16;
+                TriggerVisualEvent(f, VISUAL_EVENT_GOJO_RED, 0.4f);
             }
             break;
 
@@ -1233,6 +1245,7 @@ static void StartUltimate(Fighter* user, Fighter* target) {
             user->ultDuration = 2.4f;
             user->ultTimer    = user->ultDuration;
             user->ultStartupTimer = PURPLE_STARTUP_TIME;
+            TriggerVisualEvent(user, VISUAL_EVENT_GOJO_PURPLE, user->ultDuration);
             user->ultSpeed    = 6.0f * (float)user->facingDir;
             user->ultHitbox   = (Rectangle){
                 user->hitbox.x + (user->facingDir > 0 ? user->hitbox.width + 20.0f : -120.0f),
@@ -1392,6 +1405,8 @@ static void StartUltimate(Fighter* user, Fighter* target) {
 }
 
 static void ApplyPhysics(Fighter* f) {
+    bool wasOnGround = f->onGround;
+
     if (f->isDodging) {
         f->hitbox.x += f->dodgeVelX;
         f->dodgeFrames--;
@@ -1410,6 +1425,10 @@ static void ApplyPhysics(Fighter* f) {
         f->hitbox.y = FLOOR_Y - f->hitbox.height;
         f->velY     = 0.0f;
         f->onGround = true;
+    }
+
+    if (!wasOnGround && f->onGround) {
+        f->landingRecoverTimer = 0.14f;
     }
 
     if (f->hitbox.x < 0.0f) f->hitbox.x = 0.0f;
@@ -1774,7 +1793,8 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
 }
 
 static void UpdateAttackCooldown(Fighter* f) {
-    f->passiveTimer += GetFrameTime();
+    float dt = GetFrameTime();
+    f->passiveTimer += dt;
 
     if (f->knockbackVelX != 0.0f) {
         f->hitbox.x += f->knockbackVelX;
@@ -1832,21 +1852,43 @@ static void UpdateAttackCooldown(Fighter* f) {
     }
 
     if (f->comboDisplayTimer > 0.0f) {
-        f->comboDisplayTimer -= GetFrameTime();
+        f->comboDisplayTimer -= dt;
         if (f->comboDisplayTimer <= 0.0f) {
             f->comboDisplayTimer = 0.0f;
             f->comboCounter = 0;
         }
     }
 
+    if (f->visualEventTimer > 0.0f) {
+        f->visualEventTimer -= dt;
+        if (f->visualEventTimer <= 0.0f) {
+            f->visualEventTimer = 0.0f;
+            f->visualEventDuration = 0.0f;
+            if (!(f->charData.id == CHAR_GOJO && f->infinityActive && f->visualEvent == VISUAL_EVENT_GOJO_INFINITY)) {
+                f->visualEvent = VISUAL_EVENT_NONE;
+            }
+        }
+    }
+
+    if (f->crouchRecoverTimer > 0.0f) {
+        f->crouchRecoverTimer -= dt;
+        if (f->crouchRecoverTimer < 0.0f) f->crouchRecoverTimer = 0.0f;
+    }
+
+    if (f->landingRecoverTimer > 0.0f) {
+        f->landingRecoverTimer -= dt;
+        if (f->landingRecoverTimer < 0.0f) f->landingRecoverTimer = 0.0f;
+    }
+
     if (f->infinityActive) {
-        f->infinityDrainTimer += GetFrameTime();
+        f->infinityDrainTimer += dt;
         if (f->infinityDrainTimer >= 0.15f) {
             f->infinityDrainTimer = 0.0f;
             f->cursedEnergy -= INFINITY_CE_DRAIN * 0.15f;
             if (f->cursedEnergy <= 0.0f) {
                 f->cursedEnergy = 0.0f;
                 f->infinityActive = false;
+                f->visualEvent = VISUAL_EVENT_NONE;
             }
         }
     } else {
@@ -1864,7 +1906,7 @@ static void UpdateAttackCooldown(Fighter* f) {
     }
 
     if (f->charData.id == CHAR_NOBARA && f->dollTimer > 0.0f) {
-        f->dollTimer -= GetFrameTime();
+            f->dollTimer -= GetFrameTime();
         if (f->dollTimer <= 0.0f) {
             f->dollTimer = 0.0f;
             f->dollMarked = false;
@@ -1893,6 +1935,7 @@ static void StartDomain(Fighter* caster, Fighter* target, bool isP1,
     caster->domainActive = true;
     caster->hasDomain    = false;
     target->isStunned    = !target->isHeavenlyRestricted;
+    TriggerVisualEvent(caster, VISUAL_EVENT_GOJO_DOMAIN_CAST, 0.8f);
     *domainCasterPlayer  = isP1 ? 1 : 2;
     *domainTimer         = DOMAIN_COUNTER_WINDOW;
     *state               = STATE_DOMAIN;
@@ -1919,6 +1962,7 @@ static void TriggerDomainClash(Fighter* challenger, Fighter* caster, bool challe
     caster->domainActive      = false;
     challenger->isStunned     = false;
     caster->isStunned         = false;
+    TriggerVisualEvent(challenger, VISUAL_EVENT_GOJO_DOMAIN_COUNTER, 0.8f);
 
     clash->active   = true;
     clash->timer    = DOMAIN_CLASH_DURATION;
@@ -2023,6 +2067,7 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     int ultKey    = gControls[profile].keys[ACT_ULT];
     float spd     = f->speed;
     bool backHeld = false;
+    bool wasCrouching = f->isCrouching;
 
     if (f->dodgeCooldown > 0) f->dodgeCooldown--;
 
@@ -2067,6 +2112,7 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
         spd *= 0.5f;
     } else {
         f->hitbox.height = 90.0f;
+        if (wasCrouching) f->crouchRecoverTimer = 0.18f;
     }
 
     if (!f->isDodging && !f->ultActive) {
@@ -2138,6 +2184,7 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     int playerId = isP1 ? 1 : 2;
     float spd = f->speed;
     bool backHeld = false;
+    bool wasCrouching = f->isCrouching;
     bool pressedDomain = input->domain && !prevInput->domain;
     bool pressedUlt = input->ult && !prevInput->ult;
     bool pressedAb1 = input->ability1 && !prevInput->ability1;
@@ -2191,6 +2238,7 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
         spd *= 0.5f;
     } else {
         f->hitbox.height = 90.0f;
+        if (wasCrouching) f->crouchRecoverTimer = 0.18f;
     }
 
     if (!f->isDodging && !f->ultActive) {
@@ -2314,6 +2362,9 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     float p1Regen = CE_REGEN_RATE * (p1->charData.traits.hasCopy ? 2.0f : 1.0f);
     float p2Regen = CE_REGEN_RATE * (p2->charData.traits.hasCopy ? 2.0f : 1.0f);
     bool canAct = true;
+
+    p1->prevX = p1->hitbox.x;
+    p2->prevX = p2->hitbox.x;
 
     if (round->introTimer > 0.0f) {
         round->introTimer -= GetFrameTime();
@@ -2838,6 +2889,7 @@ int main(int argc, char** argv) {
         gojoPortraitLoaded = true;
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
+    LoadGojoSpritePack("assets/sprites/gojo");
     LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
     GameState state = STATE_MAIN_MENU;
@@ -3568,8 +3620,12 @@ int main(int argc, char** argv) {
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
-                DrawFighterBody(&p1, true);
-                DrawFighterBody(&p2, false);
+                DrawFighterBody(&p1, true,
+                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                false, false);
+                DrawFighterBody(&p2, false,
+                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                false, false);
                 DrawHUD(&p1, &p2, domainTimer, false, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
@@ -3584,8 +3640,12 @@ int main(int argc, char** argv) {
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
-                DrawFighterBody(&p1, true);
-                DrawFighterBody(&p2, false);
+                DrawFighterBody(&p1, true,
+                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                domainCasterPlayer == 1, domainCasterPlayer == 2);
+                DrawFighterBody(&p2, false,
+                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                domainCasterPlayer == 2, domainCasterPlayer == 1);
                 DrawHUD(&p1, &p2, domainTimer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
@@ -3604,8 +3664,8 @@ int main(int argc, char** argv) {
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
-                DrawFighterBody(&p1, true);
-                DrawFighterBody(&p2, false);
+                DrawFighterBody(&p1, true, -1.0f, domainCasterPlayer == 1, domainCasterPlayer == 2);
+                DrawFighterBody(&p2, false, -1.0f, domainCasterPlayer == 2, domainCasterPlayer == 1);
                 DrawHUD(&p1, &p2, clash.timer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
                 break;
@@ -3625,8 +3685,8 @@ int main(int argc, char** argv) {
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
-                DrawFighterBody(&p1, true);
-                DrawFighterBody(&p2, false);
+                DrawFighterBody(&p1, true, -1.0f, false, false);
+                DrawFighterBody(&p2, false, -1.0f, false, false);
                 DrawHUD(&p1, &p2, 0.0f, false, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.endTimer);
                 DrawGameOverOverlay(winTxt, winCol, SCREEN_W, SCREEN_H);
@@ -3640,6 +3700,7 @@ int main(int argc, char** argv) {
     if (musicLoaded) UnloadMusicStream(bgm);
     if (gRetroFontLoaded) UnloadFont(gRetroFont);
     if (gojoPortraitLoaded) UnloadTexture(gojoPortrait);
+    UnloadGojoSpritePack();
     for (int i = 0; i < menuVideo.count; i++) {
         if (IsTextureValid(menuVideo.frames[i])) UnloadTexture(menuVideo.frames[i]);
     }

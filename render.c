@@ -1,5 +1,7 @@
 #include "render.h"
 #include "raymath.h"
+#define CHARACTER_GOJO_SPRITE_IMPLEMENTATION
+#include "character_gojo_sprite.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -358,7 +360,7 @@ static void DrawUltimateEffect(Fighter* f) {
     }
 }
 
-void DrawFighterBody(Fighter* f, bool isP1) {
+void DrawFighterBody(Fighter* f, bool isP1, float introProgress, bool domainCast, bool domainCounter) {
     if (f->hp <= 0.0f) return;
 
     Vector2 shake = ShakeOffset();
@@ -386,9 +388,11 @@ void DrawFighterBody(Fighter* f, bool isP1) {
         DrawCircleLines((int)(bx + bw * 0.5f), (int)(by + bh * 0.45f), 46.0f * repel, ColorAlpha((Color){120, 200, 255, 255}, 0.45f));
     }
 
-    DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, f->bodyColor);
-    DrawRectangleRounded((Rectangle){ bx + 5.0f, by + 5.0f, bw - 10.0f, bh * 0.38f }, 0.15f, 8, Lighten(f->bodyColor, 45));
-    DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, Lighten(f->bodyColor, 85));
+    if (!DrawGojoSprite(f, isP1, introProgress, domainCast, domainCounter)) {
+        DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, f->bodyColor);
+        DrawRectangleRounded((Rectangle){ bx + 5.0f, by + 5.0f, bw - 10.0f, bh * 0.38f }, 0.15f, 8, Lighten(f->bodyColor, 45));
+        DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, Lighten(f->bodyColor, 85));
+    }
 
     float eyeX = (f->facingDir > 0) ? bx + bw - 16.0f : bx + 16.0f;
     DrawCircle((int)eyeX, (int)(by + 18.0f), 7, WHITE);
