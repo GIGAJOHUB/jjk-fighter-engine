@@ -34,6 +34,13 @@
 #define OVERTIME_THRESHOLD      60.0f
 #define BOOGIE_MAX_CHARGES       2
 #define BOOGIE_REGEN_TIME        7.0f
+#define COOLDOWN_RCT             2.0f
+#define COOLDOWN_CE_ATTACK       1.2f
+#define COOLDOWN_ABILITY_E       5.0f
+#define COOLDOWN_ABILITY_R       5.0f
+#define COOLDOWN_ABILITY_F       4.0f
+#define BIND_MOUSE_LEFT          10001
+#define BIND_MOUSE_RIGHT         10002
 
 #define DOMAIN_COUNTER_WINDOW    5.0f
 #define DOMAIN_CLASH_DURATION    1.8f
@@ -106,6 +113,8 @@ typedef enum {
     ACT_JUMP,
     ACT_CROUCH,
     ACT_ATTACK,
+    ACT_BLOCK,
+    ACT_TOOL1,
     ACT_RCT,
     ACT_DOMAIN,
     ACT_DASH,
@@ -117,7 +126,7 @@ typedef enum {
 } ControlAction;
 
 typedef struct {
-    KeyboardKey keys[ACT_COUNT];
+    int keys[ACT_COUNT];
 } ControlProfile;
 
 static ControlProfile gControls[2];
@@ -176,6 +185,7 @@ typedef struct {
     int keybindCursor;
     int keybindPlayer;
     bool waitingForKeybind;
+    float keybindScroll;
     bool signInOpen;
     float signInSavedTimer;
     float onlineResultTimer;
@@ -277,17 +287,33 @@ static void RetroText(const char* text, Vector2 pos, float fontSize, float spaci
 
 static const char* ActionLabel(ControlAction action) {
     static const char* labels[ACT_COUNT] = {
-        "Move Left", "Move Right", "Jump", "Crouch", "Positive Technique / Hit",
-        "RCT / Heal", "Domain Expansion", "Dash", "Ability 1", "Ability 2", "Ability 3", "Ultimate"
+        "Move Left", "Move Right", "Jump", "Crouch", "Melee Attack",
+        "Block / Parry", "Tool 1 / Technique", "RCT / Heal", "Domain / Amp", "Dash / Step",
+        "Innate Technique", "Technique 2", "Technique 3", "Ultimate"
     };
     return labels[action];
 }
 
-static const char* KeyLabel(KeyboardKey key) {
+static bool BindingDown(int binding) {
+    if (binding == BIND_MOUSE_LEFT) return IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    if (binding == BIND_MOUSE_RIGHT) return IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+    return IsKeyDown(binding);
+}
+
+static bool BindingPressed(int binding) {
+    if (binding == BIND_MOUSE_LEFT) return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    if (binding == BIND_MOUSE_RIGHT) return IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
+    return IsKeyPressed(binding);
+}
+
+static const char* KeyLabel(int key) {
     switch (key) {
+        case BIND_MOUSE_LEFT: return "LMB";
+        case BIND_MOUSE_RIGHT: return "RMB";
         case KEY_A: return "A";
         case KEY_D: return "D";
         case KEY_W: return "W";
+        case KEY_SPACE: return "SPACE";
         case KEY_LEFT_SHIFT: return "L-SHIFT";
         case KEY_RIGHT_SHIFT: return "R-SHIFT";
         case KEY_LEFT: return "LEFT";
@@ -297,6 +323,9 @@ static const char* KeyLabel(KeyboardKey key) {
         case KEY_E: return "E";
         case KEY_R: return "R";
         case KEY_F: return "F";
+        case KEY_G: return "G";
+        case KEY_H: return "H";
+        case KEY_T: return "T";
         case KEY_X: return "X";
         case KEY_ONE: return "1";
         case KEY_TWO: return "2";
@@ -309,7 +338,7 @@ static const char* KeyLabel(KeyboardKey key) {
         case KEY_KP_5: return "NUM5";
         case KEY_KP_6: return "NUM6";
         case KEY_KP_7: return "NUM7";
-        case KEY_SPACE: return "SPACE";
+        case KEY_KP_DECIMAL: return "NUM.";
         case KEY_ENTER: return "ENTER";
         default: return "?";
     }
@@ -318,53 +347,59 @@ static const char* KeyLabel(KeyboardKey key) {
 static void SetDefaultControls(void) {
     gControls[0].keys[ACT_LEFT] = KEY_A;
     gControls[0].keys[ACT_RIGHT] = KEY_D;
-    gControls[0].keys[ACT_JUMP] = KEY_W;
+    gControls[0].keys[ACT_JUMP] = KEY_SPACE;
     gControls[0].keys[ACT_CROUCH] = KEY_LEFT_SHIFT;
-    gControls[0].keys[ACT_ATTACK] = KEY_ONE;
-    gControls[0].keys[ACT_RCT] = KEY_TWO;
-    gControls[0].keys[ACT_DOMAIN] = KEY_THREE;
+    gControls[0].keys[ACT_ATTACK] = BIND_MOUSE_LEFT;
+    gControls[0].keys[ACT_BLOCK] = BIND_MOUSE_RIGHT;
+    gControls[0].keys[ACT_TOOL1] = KEY_ONE;
+    gControls[0].keys[ACT_RCT] = KEY_R;
+    gControls[0].keys[ACT_DOMAIN] = KEY_H;
     gControls[0].keys[ACT_DASH] = KEY_Q;
     gControls[0].keys[ACT_ABILITY1] = KEY_E;
-    gControls[0].keys[ACT_ABILITY2] = KEY_R;
-    gControls[0].keys[ACT_ABILITY3] = KEY_F;
+    gControls[0].keys[ACT_ABILITY2] = KEY_F;
+    gControls[0].keys[ACT_ABILITY3] = KEY_G;
     gControls[0].keys[ACT_ULT] = KEY_X;
 
     gControls[1].keys[ACT_LEFT] = KEY_LEFT;
     gControls[1].keys[ACT_RIGHT] = KEY_RIGHT;
     gControls[1].keys[ACT_JUMP] = KEY_UP;
     gControls[1].keys[ACT_CROUCH] = KEY_RIGHT_SHIFT;
-    gControls[1].keys[ACT_ATTACK] = KEY_KP_1;
+    gControls[1].keys[ACT_ATTACK] = KEY_KP_0;
+    gControls[1].keys[ACT_BLOCK] = KEY_KP_DECIMAL;
+    gControls[1].keys[ACT_TOOL1] = KEY_KP_1;
     gControls[1].keys[ACT_RCT] = KEY_KP_2;
     gControls[1].keys[ACT_DOMAIN] = KEY_KP_3;
-    gControls[1].keys[ACT_DASH] = KEY_KP_0;
+    gControls[1].keys[ACT_DASH] = KEY_KP_8;
     gControls[1].keys[ACT_ABILITY1] = KEY_KP_4;
     gControls[1].keys[ACT_ABILITY2] = KEY_KP_5;
     gControls[1].keys[ACT_ABILITY3] = KEY_KP_6;
     gControls[1].keys[ACT_ULT] = KEY_KP_7;
 }
 
-static Rectangle KeybindRowRect(int index) {
-    return (Rectangle){ 118.0f, 132.0f + index * 28.0f, 724.0f, 22.0f };
+static Rectangle KeybindRowRect(int index, float scroll) {
+    return (Rectangle){ 118.0f, 132.0f + index * 28.0f - scroll, 724.0f, 22.0f };
 }
 
 static NetInput GatherPlayerOneControls(void) {
     NetInput input = {0};
-    input.left = IsKeyDown(gControls[0].keys[ACT_LEFT]);
-    input.right = IsKeyDown(gControls[0].keys[ACT_RIGHT]);
-    input.jump = IsKeyDown(gControls[0].keys[ACT_JUMP]);
-    input.crouch = IsKeyDown(gControls[0].keys[ACT_CROUCH]);
-    input.attack = IsKeyDown(gControls[0].keys[ACT_ATTACK]);
-    input.rct = IsKeyDown(gControls[0].keys[ACT_RCT]);
-    input.domain = IsKeyDown(gControls[0].keys[ACT_DOMAIN]);
-    input.dodge = IsKeyDown(gControls[0].keys[ACT_DASH]);
-    input.ability1 = IsKeyDown(gControls[0].keys[ACT_ABILITY1]);
-    input.ability2 = IsKeyDown(gControls[0].keys[ACT_ABILITY2]);
-    input.ability3 = IsKeyDown(gControls[0].keys[ACT_ABILITY3]);
-    input.ult = IsKeyDown(gControls[0].keys[ACT_ULT]);
+    input.left = BindingDown(gControls[0].keys[ACT_LEFT]);
+    input.right = BindingDown(gControls[0].keys[ACT_RIGHT]);
+    input.jump = BindingDown(gControls[0].keys[ACT_JUMP]);
+    input.crouch = BindingDown(gControls[0].keys[ACT_CROUCH]);
+    input.attack = BindingDown(gControls[0].keys[ACT_ATTACK]);
+    input.block = BindingDown(gControls[0].keys[ACT_BLOCK]);
+    input.ceAttack = BindingDown(gControls[0].keys[ACT_TOOL1]);
+    input.rct = BindingDown(gControls[0].keys[ACT_RCT]);
+    input.domain = BindingDown(gControls[0].keys[ACT_DOMAIN]);
+    input.dodge = BindingDown(gControls[0].keys[ACT_DASH]);
+    input.abilityE = BindingDown(gControls[0].keys[ACT_ABILITY1]);
+    input.abilityR = BindingDown(gControls[0].keys[ACT_ABILITY2]);
+    input.abilityF = BindingDown(gControls[0].keys[ACT_ABILITY3]);
+    input.ult = BindingDown(gControls[0].keys[ACT_ULT]);
     return input;
 }
 
-static bool NetInputChanged(const NetInput* a, const NetInput* b) {
+static bool __attribute__((unused)) NetInputChanged(const NetInput* a, const NetInput* b) {
     return memcmp(a, b, sizeof(NetInput)) != 0;
 }
 
@@ -605,7 +640,7 @@ static void UnpackFighterSnapshot(Fighter* f, const FighterSnapshot* s) {
         : CHAR_COUNT;
 }
 
-static MatchSnapshot BuildMatchSnapshot(GameState state, int domainCasterPlayer, float domainTimer,
+static MatchSnapshot __attribute__((unused)) BuildMatchSnapshot(GameState state, int domainCasterPlayer, float domainTimer,
                                         const DomainClashState* clash, const SelectState* p1sel,
                                         const SelectState* p2sel, const Fighter* p1, const Fighter* p2) {
     MatchSnapshot snapshot = {0};
@@ -624,7 +659,7 @@ static MatchSnapshot BuildMatchSnapshot(GameState state, int domainCasterPlayer,
     return snapshot;
 }
 
-static void ApplyMatchSnapshot(const MatchSnapshot* snapshot, GameState* state, int* domainCasterPlayer,
+static void __attribute__((unused)) ApplyMatchSnapshot(const MatchSnapshot* snapshot, GameState* state, int* domainCasterPlayer,
                                float* domainTimer, DomainClashState* clash, SelectState* p1sel,
                                SelectState* p2sel, Fighter* p1, Fighter* p2) {
     *state = (GameState)snapshot->gameState;
@@ -859,6 +894,7 @@ static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, flo
     bool blocking = false;
 
     if (dodgeable && target->isDodging && target->dodgeInvulFrames > 0) return false;
+    if (target->wakeupInvincFrames > 0) return false;
     if (IsInfinityBlocking(attacker, target, bypassInfinity, &damageScale)) return false;
     if (target->mahoragaActive &&
         ((projectileHit && fabsf((attacker->hitbox.x + attacker->hitbox.width * 0.5f) - (target->mahoragaHitbox.x + target->mahoragaHitbox.width * 0.5f)) < 220.0f) ||
@@ -872,11 +908,11 @@ static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, flo
     blocking = target->isBlocking && !target->isHeavenlyRestricted && !bypassInfinity;
     if (blocking) {
         damage *= 0.08f;
-        displacement = 8.0f;
-        stunFrames = (stunFrames > 8) ? 8 : stunFrames;
+        displacement = 18.0f;
+        stunFrames = 12;
         ParticleSpawnBurst(
             (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
-            10, (Color){150, 210, 255, 255}, 3.0f, 0.25f, 3.2f, PARTICLE_SPARK
+            12, (Color){215, 225, 235, 255}, 3.0f, 0.25f, 3.2f, PARTICLE_SPARK
         );
     }
 
@@ -890,7 +926,7 @@ static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, flo
     target->knockbackVelX = direction * displacement * damageScale;
     if (damage >= 55.0f || attacker->ultActive) {
         target->isKnockedDown = true;
-        target->wakeupFrames = 40;
+        target->knockdownFrames = 44;
     }
 
     if (displacement != 0.0f) {
@@ -1738,11 +1774,12 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
         input.right = false;
     }
 
-    if (enemyUlting && gap < 180.0f) input.dodge = true;
+    if (enemyUlting && gap < 180.0f) input.block = true;
+    if (enemyUlting && gap < 140.0f) input.dodge = true;
     if (lowHealth && cpu->cursedEnergy >= CalcRCTCost(cpu) && gap > 150.0f) input.rct = true;
     if (canDomainCounter && cpu->hasDomain && cpu->cursedEnergy >= CalcCECost(cpu, DOMAIN_CE_COST)) input.domain = true;
     if (state == STATE_BATTLE && fullCe && gap > 120.0f && cpu->hasDomain && aggro > 0.65f) input.domain = true;
-    if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.ability3 = true;
+    if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.abilityF = true;
 
     if (!cpu->ultUsed) {
         switch (cpu->charData.id) {
@@ -1776,14 +1813,14 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
 
     if (gap < 90.0f) {
         input.attack = true;
-        if (difficulty != CPU_EASY && GetRandomValue(0, 100) < (int)(aggro * 70.0f)) input.ability2 = true;
-        if (difficulty == CPU_HARD && GetRandomValue(0, 100) < 28) input.ability1 = true;
+        if (difficulty != CPU_EASY && GetRandomValue(0, 100) < (int)(aggro * 70.0f)) input.abilityR = true;
+        if (difficulty == CPU_HARD && GetRandomValue(0, 100) < 28) input.abilityE = true;
     } else if (gap < 180.0f) {
-        if (GetRandomValue(0, 100) < (int)(aggro * 65.0f)) input.ability1 = true;
-        if (GetRandomValue(0, 100) < (difficulty == CPU_HARD ? 35 : 16)) input.ability2 = true;
+        if (GetRandomValue(0, 100) < (int)(aggro * 65.0f)) input.abilityE = true;
+        if (GetRandomValue(0, 100) < (difficulty == CPU_HARD ? 35 : 16)) input.abilityR = true;
     } else {
-        if (GetRandomValue(0, 100) < (int)(aggro * 55.0f)) input.attack = true;
-        if (GetRandomValue(0, 100) < (int)(aggro * 50.0f)) input.ability1 = true;
+        if (GetRandomValue(0, 100) < (int)(aggro * 55.0f)) input.ceAttack = true;
+        if (GetRandomValue(0, 100) < (int)(aggro * 50.0f)) input.abilityE = true;
     }
 
     if (!cpu->onGround && difficulty != CPU_EASY && gap < 120.0f) input.attack = true;
@@ -1808,16 +1845,17 @@ static void UpdateAttackCooldown(Fighter* f) {
     }
 
     if (f->isKnockedDown) {
-        if (f->wakeupFrames > 0) {
-            f->wakeupFrames--;
+        if (f->knockdownFrames > 0) {
+            f->knockdownFrames--;
             f->isCrouching = true;
             f->hitbox.height = 42.0f;
         } else {
             f->isKnockedDown = false;
-            f->dodgeInvulFrames = 6;
+            f->wakeupInvincFrames = 8;
             f->hitbox.height = 90.0f;
         }
     }
+    if (f->wakeupInvincFrames > 0) f->wakeupInvincFrames--;
 
     if (f->dodgeInvulFrames > 0) {
         f->dodgeInvulFrames--;
@@ -1916,6 +1954,30 @@ static void UpdateAttackCooldown(Fighter* f) {
     if (f->resonanceCooldown > 0.0f) {
         f->resonanceCooldown -= GetFrameTime();
         if (f->resonanceCooldown < 0.0f) f->resonanceCooldown = 0.0f;
+    }
+    if (f->rctCooldown > 0.0f) {
+        f->rctCooldown -= dt;
+        if (f->rctCooldown < 0.0f) f->rctCooldown = 0.0f;
+    }
+    if (f->ceAttackCooldown > 0.0f) {
+        f->ceAttackCooldown -= dt;
+        if (f->ceAttackCooldown < 0.0f) f->ceAttackCooldown = 0.0f;
+    }
+    if (f->abilityECooldown > 0.0f) {
+        f->abilityECooldown -= dt;
+        if (f->abilityECooldown < 0.0f) f->abilityECooldown = 0.0f;
+    }
+    if (f->abilityRCooldown > 0.0f) {
+        f->abilityRCooldown -= dt;
+        if (f->abilityRCooldown < 0.0f) f->abilityRCooldown = 0.0f;
+    }
+    if (f->abilityFCooldown > 0.0f) {
+        f->abilityFCooldown -= dt;
+        if (f->abilityFCooldown < 0.0f) f->abilityFCooldown = 0.0f;
+    }
+    if (f->rctGlowTimer > 0.0f) {
+        f->rctGlowTimer -= dt;
+        if (f->rctGlowTimer < 0.0f) f->rctGlowTimer = 0.0f;
     }
 
     if (f->ghostHP > f->hp) {
@@ -2058,6 +2120,8 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     int jumpKey   = gControls[profile].keys[ACT_JUMP];
     int crouchKey = gControls[profile].keys[ACT_CROUCH];
     int atkKey    = gControls[profile].keys[ACT_ATTACK];
+    int blockKey  = gControls[profile].keys[ACT_BLOCK];
+    int toolKey   = gControls[profile].keys[ACT_TOOL1];
     int rctKey    = gControls[profile].keys[ACT_RCT];
     int domainKey = gControls[profile].keys[ACT_DOMAIN];
     int dodgeKey  = gControls[profile].keys[ACT_DASH];
@@ -2066,7 +2130,6 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     int ab3Key    = gControls[profile].keys[ACT_ABILITY3];
     int ultKey    = gControls[profile].keys[ACT_ULT];
     float spd     = f->speed;
-    bool backHeld = false;
     bool wasCrouching = f->isCrouching;
 
     if (f->dodgeCooldown > 0) f->dodgeCooldown--;
@@ -2095,18 +2158,17 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     if (actuallyStunned) return;
     if (f->isKnockedDown) return;
 
-    backHeld = (opponent->hitbox.x > f->hitbox.x) ? IsKeyDown(leftKey) : IsKeyDown(rightKey);
-    f->isBlocking = backHeld && !f->isAttacking && !f->ultActive && !f->isDodging;
+    f->isBlocking = BindingDown(blockKey) && !f->isAttacking && !f->ultActive && !f->isDodging && !f->isHeavenlyRestricted;
 
-    if (IsKeyPressed(ab1Key)) UseAbility1(f, opponent, isP1);
-    if (IsKeyPressed(ab2Key)) UseAbility2(f, opponent, isP1);
-    if (IsKeyPressed(ab3Key)) UseAbility3(f, isP1);
+    if (BindingPressed(ab1Key) && f->abilityECooldown <= 0.0f) { UseAbility1(f, opponent, isP1); f->abilityECooldown = COOLDOWN_ABILITY_E; }
+    if (BindingPressed(ab2Key) && f->abilityRCooldown <= 0.0f) { UseAbility2(f, opponent, isP1); f->abilityRCooldown = COOLDOWN_ABILITY_R; }
+    if (BindingPressed(ab3Key) && f->abilityFCooldown <= 0.0f) { UseAbility3(f, isP1); f->abilityFCooldown = COOLDOWN_ABILITY_F; }
 
-    if (IsKeyPressed(ultKey) && *state == STATE_BATTLE) {
+    if (BindingPressed(ultKey) && *state == STATE_BATTLE) {
         StartUltimate(f, opponent);
     }
 
-    f->isCrouching = IsKeyDown(crouchKey);
+    f->isCrouching = BindingDown(crouchKey);
     if (f->isCrouching) {
         f->hitbox.height = 52.0f;
         spd *= 0.5f;
@@ -2116,15 +2178,15 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     }
 
     if (!f->isDodging && !f->ultActive) {
-        if (IsKeyDown(leftKey))  { f->hitbox.x -= spd; f->facingDir = -1; }
-        if (IsKeyDown(rightKey)) { f->hitbox.x += spd; f->facingDir =  1; }
-        if (IsKeyPressed(jumpKey) && f->onGround) {
+        if (BindingDown(leftKey))  { f->hitbox.x -= spd; f->facingDir = -1; }
+        if (BindingDown(rightKey)) { f->hitbox.x += spd; f->facingDir =  1; }
+        if (BindingPressed(jumpKey) && f->onGround) {
             f->velY = JUMP_FORCE;
             f->onGround = false;
         }
     }
 
-    if (IsKeyPressed(dodgeKey) && !f->isDodging && f->dodgeCooldown == 0 && f->onGround && !f->ultActive) {
+    if (BindingPressed(dodgeKey) && !f->isDodging && f->dodgeCooldown == 0 && f->onGround && !f->ultActive) {
         f->isDodging      = true;
         f->dodgeFrames    = DODGE_FRAMES;
         f->dodgeInvulFrames = DODGE_INVUL_FRAMES;
@@ -2136,43 +2198,43 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
         );
     }
 
-    if (IsKeyPressed(atkKey) && !f->isAttacking && !f->ultActive) {
-        bool forceMelee = f->isHeavenlyRestricted || f->charData.id == CHAR_YUJI || HorizontalGap(f, opponent) < 95.0f;
+    if (BindingPressed(atkKey) && !f->isAttacking && !f->ultActive) {
+        bool forceMelee = true;
         f->isAttacking  = true;
         f->attackFrames = 14;
         f->attackLanded = false;
         if (!f->onGround) {
             f->attackFrames = 12;
         }
-
-        if (forceMelee) {
-            DoMeleeHit(f, opponent);
-        } else {
-            float ceCost = CalcCECost(f, CE_ATTACK_COST);
-            if (f->cursedEnergy >= ceCost) {
-                f->cursedEnergy -= ceCost;
-                StartProjectileAttack(f, isP1);
-            } else {
-                DoMeleeHit(f, opponent);
-            }
-        }
+        (void)forceMelee;
+        DoMeleeHit(f, opponent);
     }
 
     if (f->isAttacking) {
         DoMeleeHit(f, opponent);
     }
 
-    if (IsKeyPressed(rctKey) && !f->isHeavenlyRestricted && !f->ultActive && f->hp < f->maxHP - 0.5f) {
+    if (BindingPressed(toolKey) && !f->isHeavenlyRestricted && !f->ultActive && f->ceAttackCooldown <= 0.0f) {
+        float ceCost = CalcCECost(f, CE_ATTACK_COST);
+        if (f->cursedEnergy >= ceCost) {
+            f->cursedEnergy -= ceCost;
+            f->ceAttackCooldown = COOLDOWN_CE_ATTACK;
+            StartProjectileAttack(f, isP1);
+        }
+    }
+
+    if (BindingPressed(rctKey) && !f->isHeavenlyRestricted && !f->ultActive && f->hp < f->maxHP - 0.5f && f->rctCooldown <= 0.0f) {
         float ceCost = CalcRCTCost(f);
         if (f->cursedEnergy >= ceCost) {
             float healAmt = RCT_HEAL_AMOUNT * f->charData.traits.rctHealMultiplier;
             f->cursedEnergy -= ceCost;
             f->hp += healAmt;
+            f->rctCooldown = COOLDOWN_RCT;
+            f->rctGlowTimer = 0.5f;
             ClampFighter(f);
-            ParticleSpawnBurst(
-                (Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y },
-                12, (Color){80, 255, 120, 255}, 1.8f, 0.6f, 4.0f, PARTICLE_REGEN
-            );
+            TriggerRCTFlash();
+            SpawnRCTBurst((Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y + 12.0f });
+            FloatingTextSpawn((Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y - 8.0f }, "+30 HP", (Color){80, 255, 120, 255}, 1.0f);
         }
     }
 }
@@ -2183,16 +2245,16 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     bool actuallyStunned = (stunLock && !f->isHeavenlyRestricted) || f->hitStunFrames > 0;
     int playerId = isP1 ? 1 : 2;
     float spd = f->speed;
-    bool backHeld = false;
     bool wasCrouching = f->isCrouching;
     bool pressedDomain = input->domain && !prevInput->domain;
     bool pressedUlt = input->ult && !prevInput->ult;
-    bool pressedAb1 = input->ability1 && !prevInput->ability1;
-    bool pressedAb2 = input->ability2 && !prevInput->ability2;
-    bool pressedAb3 = input->ability3 && !prevInput->ability3;
+    bool pressedAb1 = input->abilityE && !prevInput->abilityE;
+    bool pressedAb2 = input->abilityR && !prevInput->abilityR;
+    bool pressedAb3 = input->abilityF && !prevInput->abilityF;
     bool pressedJump = input->jump && !prevInput->jump;
     bool pressedDodge = input->dodge && !prevInput->dodge;
     bool pressedAttack = input->attack && !prevInput->attack;
+    bool pressedTool = input->ceAttack && !prevInput->ceAttack;
     bool pressedRCT = input->rct && !prevInput->rct;
 
     if (f->dodgeCooldown > 0) f->dodgeCooldown--;
@@ -2221,12 +2283,11 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     if (actuallyStunned) return;
     if (f->isKnockedDown) return;
 
-    backHeld = (opponent->hitbox.x > f->hitbox.x) ? input->left : input->right;
-    f->isBlocking = backHeld && !f->isAttacking && !f->ultActive && !f->isDodging;
+    f->isBlocking = input->block && !f->isAttacking && !f->ultActive && !f->isDodging && !f->isHeavenlyRestricted;
 
-    if (pressedAb1) UseAbility1(f, opponent, isP1);
-    if (pressedAb2) UseAbility2(f, opponent, isP1);
-    if (pressedAb3) UseAbility3(f, isP1);
+    if (pressedAb1 && f->abilityECooldown <= 0.0f) { UseAbility1(f, opponent, isP1); f->abilityECooldown = COOLDOWN_ABILITY_E; }
+    if (pressedAb2 && f->abilityRCooldown <= 0.0f) { UseAbility2(f, opponent, isP1); f->abilityRCooldown = COOLDOWN_ABILITY_R; }
+    if (pressedAb3 && f->abilityFCooldown <= 0.0f) { UseAbility3(f, isP1); f->abilityFCooldown = COOLDOWN_ABILITY_F; }
 
     if (pressedUlt && *state == STATE_BATTLE) {
         StartUltimate(f, opponent);
@@ -2263,42 +2324,40 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
     }
 
     if (pressedAttack && !f->isAttacking && !f->ultActive) {
-        bool forceMelee = f->isHeavenlyRestricted || f->charData.id == CHAR_YUJI || HorizontalGap(f, opponent) < 95.0f;
         f->isAttacking = true;
         f->attackFrames = 14;
         f->attackLanded = false;
         if (!f->onGround) {
             f->attackFrames = 12;
         }
-
-        if (forceMelee) {
-            DoMeleeHit(f, opponent);
-        } else {
-            float ceCost = CalcCECost(f, CE_ATTACK_COST);
-            if (f->cursedEnergy >= ceCost) {
-                f->cursedEnergy -= ceCost;
-                StartProjectileAttack(f, isP1);
-            } else {
-                DoMeleeHit(f, opponent);
-            }
-        }
+        DoMeleeHit(f, opponent);
     }
 
     if (f->isAttacking) {
         DoMeleeHit(f, opponent);
     }
 
-    if (pressedRCT && !f->isHeavenlyRestricted && !f->ultActive && f->hp < f->maxHP - 0.5f) {
+    if (pressedTool && !f->isHeavenlyRestricted && !f->ultActive && f->ceAttackCooldown <= 0.0f) {
+        float ceCost = CalcCECost(f, CE_ATTACK_COST);
+        if (f->cursedEnergy >= ceCost) {
+            f->cursedEnergy -= ceCost;
+            f->ceAttackCooldown = COOLDOWN_CE_ATTACK;
+            StartProjectileAttack(f, isP1);
+        }
+    }
+
+    if (pressedRCT && !f->isHeavenlyRestricted && !f->ultActive && f->hp < f->maxHP - 0.5f && f->rctCooldown <= 0.0f) {
         float ceCost = CalcRCTCost(f);
         if (f->cursedEnergy >= ceCost) {
             float healAmt = RCT_HEAL_AMOUNT * f->charData.traits.rctHealMultiplier;
             f->cursedEnergy -= ceCost;
             f->hp += healAmt;
+            f->rctCooldown = COOLDOWN_RCT;
+            f->rctGlowTimer = 0.5f;
             ClampFighter(f);
-            ParticleSpawnBurst(
-                (Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y },
-                12, (Color){80, 255, 120, 255}, 1.8f, 0.6f, 4.0f, PARTICLE_REGEN
-            );
+            TriggerRCTFlash();
+            SpawnRCTBurst((Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y + 12.0f });
+            FloatingTextSpawn((Vector2){ f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y - 8.0f }, "+30 HP", (Color){80, 255, 120, 255}, 1.0f);
         }
     }
 }
@@ -2396,8 +2455,30 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     ClampFighter(p1);
     ClampFighter(p2);
 
-    bool p1Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 2);
-    bool p2Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 1);
+    bool p1Survival = (*state == STATE_DOMAIN && *domainCasterPlayer == 2 && !p1->hasDomain && !p1->isHeavenlyRestricted);
+    bool p2Survival = (*state == STATE_DOMAIN && *domainCasterPlayer == 1 && !p2->hasDomain && !p2->isHeavenlyRestricted);
+    bool p1Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 2 && !p1Survival && !p1->isHeavenlyRestricted);
+    bool p2Stun = (*state == STATE_DOMAIN && *domainCasterPlayer == 1 && !p2Survival && !p2->isHeavenlyRestricted);
+
+    if (*state == STATE_DOMAIN) {
+        if (p1Survival) {
+            p1->speed = p1->charData.baseSpeed * 1.4f;
+            p2->speed = p2->charData.baseSpeed * 1.4f;
+            p1->cursedEnergy += p1Regen * 2.0f;
+            p2->cursedEnergy -= CE_REGEN_RATE;
+        } else if (p2Survival) {
+            p1->speed = p1->charData.baseSpeed * 1.4f;
+            p2->speed = p2->charData.baseSpeed * 1.4f;
+            p2->cursedEnergy += p2Regen * 2.0f;
+            p1->cursedEnergy -= CE_REGEN_RATE;
+        } else {
+            if (p1->isHeavenlyRestricted && *domainCasterPlayer == 2) p1->speed = p1->charData.baseSpeed * 1.6f;
+            if (p2->isHeavenlyRestricted && *domainCasterPlayer == 1) p2->speed = p2->charData.baseSpeed * 1.6f;
+        }
+    } else {
+        p1->speed = p1->charData.baseSpeed * (p1->overtimeBuff ? 1.0f : 1.0f);
+        p2->speed = p2->charData.baseSpeed * (p2->overtimeBuff ? 1.0f : 1.0f);
+    }
 
     if (canAct) {
         if (cpuMode && p1Input != NULL && p1Prev != NULL && cpuPrevInput != NULL) {
@@ -2529,16 +2610,17 @@ static Rectangle CpuDifficultyRowRect(int index) {
     return (Rectangle){ 300.0f, 188.0f + index * 52.0f, 360.0f, 36.0f };
 }
 
-static Rectangle CharSelectCardRect(int index, int p1Cursor, int p2Cursor) {
+static Rectangle CharSelectCardRect(int index, int p1Cursor, int p2Cursor, bool cpuMode, int focusIndex) {
     int slotW = 206;
     int gap = 24;
     float stripW = (float)(CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap);
-    float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
+    float focus = cpuMode ? (float)(focusIndex == 0 ? p1Cursor : p2Cursor) : (((float)p1Cursor + (float)p2Cursor) * 0.5f);
     float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
     float offset = targetCenter - SCREEN_W * 0.5f;
-    float maxOffset = stripW - ((float)SCREEN_W - 120.0f);
+    float visibleW = (float)SCREEN_W - 120.0f;
+    float maxOffset = stripW - visibleW;
     if (maxOffset < 0.0f) maxOffset = 0.0f;
-    offset = Clamp(offset, -80.0f, maxOffset);
+    offset = Clamp(offset, 0.0f, maxOffset);
     float x = 60.0f - offset + index * (float)(slotW + gap);
     float lift = (p1Cursor == index || p2Cursor == index) ? -10.0f : 0.0f;
     return (Rectangle){ x, 102.0f + lift, (float)slotW, 296.0f };
@@ -2608,16 +2690,29 @@ static void DrawCpuDifficultyMenu(const MenuVideo* video, int cursor) {
 }
 
 static void DrawKeybindMenu(const MenuVideo* video, const FrontendState* frontend) {
+    static const char* kitLines[] = {
+        "GOJO: E BLUE | F RED | G INFINITY | H DOMAIN | X PURPLE",
+        "SUKUNA: E DISMANTLE | F CLEAVE | H DOMAIN | X FUGA",
+        "YUTA: E KATANA | F RIKA | H DOMAIN | X LOVE BEAM",
+        "YUJI: E BLACK FLASH FLOW | H SURVIVE | X BLACK FLASH",
+        "TOJI: E ASSAULT | F WEAPON FLOW | G INSTINCT | X HEAVENLY ASSAULT",
+        "MEGUMI: E NUE | F DOGS | G SHADOW SETUP | H DOMAIN | X MAHORAGA",
+        "NANAMI: E RATIO | F COLLAPSE | G OVERTIME | X OVERTIME SLASH",
+        "NOBARA: E NAIL | F RESONANCE | G HAIRPIN | X MAXIMUM",
+        "TODO: E STRIKE | F BOOGIE | G CLAP | X TACKLE"
+    };
+    int kitCount = (int)(sizeof(kitLines) / sizeof(kitLines[0]));
+    float contentY = 118.0f - frontend->keybindScroll;
     DrawMenuBackground(video);
     DrawPixelPanel((Rectangle){ 74, 44, 812, 430 }, (Color){16, 12, 26, 230}, (Color){255, 214, 118, 255});
     RetroText("KEYBINDS", (Vector2){ 396, 66 }, 26.0f, 1.0f, WHITE);
     RetroText(frontend->keybindPlayer == 0 ? "PLAYER 1" : "PLAYER 2", (Vector2){ 136, 72 }, 16.0f, 1.0f, (Color){120, 220, 255, 255});
-    RetroText("TAB SWITCHES PLAYER | ENTER/CLICK TO REBIND | ESC/BACK TO RETURN", (Vector2){ 164, 96 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
-    RetroText("GENERAL", (Vector2){ 118, 118 }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
-    RetroText("CHARACTER KITS", (Vector2){ 118, 352 }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+    RetroText("TAB SWITCHES PLAYER | CLICK/ENTER TO REBIND | WHEEL SCROLLS | ESC/BACK RETURNS", (Vector2){ 110, 96 }, 11.0f, 1.0f, (Color){220, 230, 255, 235});
+    RetroText("GENERAL", (Vector2){ 118, contentY }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
 
     for (int i = 0; i < ACT_COUNT; i++) {
-        Rectangle row = KeybindRowRect(i);
+        Rectangle row = KeybindRowRect(i, frontend->keybindScroll);
+        if (row.y + row.height < 112.0f || row.y > 436.0f) continue;
         bool selected = (i == frontend->keybindCursor);
         DrawRectangleRec(row, selected ? (Color){58, 96, 138, 220} : (Color){26, 28, 44, 210});
         DrawRectangleLinesEx(row, 1.0f, selected ? (Color){255, 230, 130, 255} : (Color){110, 100, 150, 180});
@@ -2625,14 +2720,16 @@ static void DrawKeybindMenu(const MenuVideo* video, const FrontendState* fronten
         RetroText(KeyLabel(gControls[frontend->keybindPlayer].keys[i]), (Vector2){ row.x + 560.0f, row.y + 5.0f }, 11.0f, 1.0f, (Color){120, 220, 255, 255});
         RetroText("EDIT", (Vector2){ row.x + 662.0f, row.y + 5.0f }, 11.0f, 1.0f, (Color){255, 214, 118, 255});
     }
-
-    RetroText("GOJO: BLUE / RED / INFINITY / PURPLE", (Vector2){ 118, 378 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
-    RetroText("SUKUNA: DISMANTLE / CLEAVE / FUGA", (Vector2){ 118, 396 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
-    RetroText("YUTA: KATANA / RIKA / PURE LOVE BEAM", (Vector2){ 118, 414 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
-    RetroText("MEGUMI / NANAMI / NOBARA / TODO SHARE ABILITY 1-3 + ULT BINDS", (Vector2){ 118, 432 }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    contentY += 28.0f * (ACT_COUNT + 1);
+    RetroText("CHARACTER KITS", (Vector2){ 118, contentY }, 12.0f, 1.0f, (Color){255, 214, 118, 255});
+    for (int i = 0; i < kitCount; i++) {
+        float y = contentY + 24.0f + i * 20.0f;
+        if (y < 112.0f || y > 438.0f) continue;
+        RetroText(kitLines[i], (Vector2){ 118, y }, 10.0f, 1.0f, (Color){220, 230, 255, 235});
+    }
     DrawRectangleRec((Rectangle){ 700, 430, 120, 26 }, (Color){28, 34, 52, 220});
     DrawRectangleLinesEx((Rectangle){ 700, 430, 120, 26 }, 2.0f, (Color){255, 214, 118, 255});
-    RetroText(frontend->waitingForKeybind ? "PRESS KEY" : "BACK", (Vector2){ frontend->waitingForKeybind ? 726.0f : 742.0f, 437.0f }, 12.0f, 1.0f, WHITE);
+    RetroText(frontend->waitingForKeybind ? "PRESS INPUT" : "BACK", (Vector2){ frontend->waitingForKeybind ? 710.0f : 742.0f, 437.0f }, 12.0f, 1.0f, WHITE);
 }
 
 static void DrawMultiplayerMenu(const MenuVideo* video, const MultiplayerMenuState* mpMenu) {
@@ -2782,9 +2879,15 @@ static void UpdateFightVideo(FightVideo* video) {
     }
 }
 
-static void DrawFightVideoBackground(const FightVideo* video, bool domainActive, CharacterID casterId) {
+static void DrawFightVideoBackground(const FightVideo* video, bool domainActive, CharacterID casterId, float focalX) {
     if (video->count > 0 && IsTextureValid(video->frames[video->currentFrame])) {
-        Rectangle src = {0, 0, (float)video->frames[video->currentFrame].width, (float)video->frames[video->currentFrame].height};
+        float zoom = 2.0f;
+        float srcW = (float)video->frames[video->currentFrame].width / zoom;
+        float srcH = (float)video->frames[video->currentFrame].height / zoom;
+        float focalNorm = focalX / (float)SCREEN_W;
+        float maxSrcX = (float)video->frames[video->currentFrame].width - srcW;
+        float srcX = Clamp(maxSrcX * focalNorm, 0.0f, maxSrcX);
+        Rectangle src = {srcX, 0, srcW, srcH};
         Rectangle dst = {0, 0, SCREEN_W, SCREEN_H};
         DrawTexturePro(video->frames[video->currentFrame], src, dst, (Vector2){0, 0}, 0.0f, WHITE);
     } else {
@@ -2933,6 +3036,7 @@ int main(int argc, char** argv) {
 
         ShakeUpdate();
         ParticleUpdate();
+        FloatingTextUpdate();
         AnnounceUpdate();
 
         if (frontend.signInSavedTimer > 0.0f) {
@@ -3121,6 +3225,7 @@ int main(int argc, char** argv) {
                             frontend.keybindCursor = 0;
                             frontend.keybindPlayer = 0;
                             frontend.waitingForKeybind = false;
+                            frontend.keybindScroll = 0.0f;
                             state = STATE_KEYBINDS;
                             break;
                         case 5:
@@ -3179,7 +3284,13 @@ int main(int argc, char** argv) {
                 if (frontend.waitingForKeybind) {
                     int pressed = GetKeyPressed();
                     if (pressed != 0 && pressed != KEY_ESCAPE) {
-                        gControls[frontend.keybindPlayer].keys[frontend.keybindCursor] = (KeyboardKey)pressed;
+                        gControls[frontend.keybindPlayer].keys[frontend.keybindCursor] = pressed;
+                        frontend.waitingForKeybind = false;
+                    } else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        gControls[frontend.keybindPlayer].keys[frontend.keybindCursor] = BIND_MOUSE_LEFT;
+                        frontend.waitingForKeybind = false;
+                    } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                        gControls[frontend.keybindPlayer].keys[frontend.keybindCursor] = BIND_MOUSE_RIGHT;
                         frontend.waitingForKeybind = false;
                     } else if (IsKeyPressed(KEY_ESCAPE)) {
                         frontend.waitingForKeybind = false;
@@ -3191,10 +3302,13 @@ int main(int argc, char** argv) {
                     break;
                 }
                 if (IsKeyPressed(KEY_TAB)) frontend.keybindPlayer = 1 - frontend.keybindPlayer;
+                frontend.keybindScroll -= GetMouseWheelMove() * 24.0f;
+                if (frontend.keybindScroll < 0.0f) frontend.keybindScroll = 0.0f;
+                if (frontend.keybindScroll > 180.0f) frontend.keybindScroll = 180.0f;
                 if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) frontend.keybindCursor = (frontend.keybindCursor + 1) % ACT_COUNT;
                 if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) frontend.keybindCursor = (frontend.keybindCursor + ACT_COUNT - 1) % ACT_COUNT;
                 for (int i = 0; i < ACT_COUNT; i++) {
-                    if (CheckCollisionPointRec(mousePos, KeybindRowRect(i))) {
+                    if (CheckCollisionPointRec(mousePos, KeybindRowRect(i, frontend.keybindScroll))) {
                         frontend.keybindCursor = i;
                         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) clickedRow = i;
                     }
@@ -3374,7 +3488,7 @@ int main(int argc, char** argv) {
                     if (wheel < -0.1f && !focusSel->confirmed && focusSel->cursor < CHAR_COUNT - 1) focusSel->cursor++;
                     if (wheel > 0.1f && !focusSel->confirmed && focusSel->cursor > 0) focusSel->cursor--;
                     for (int i = 0; i < CHAR_COUNT; i++) {
-                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor);
+                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor, true, frontend.charSelectFocus);
                         if (CheckCollisionPointRec(mousePos, card)) {
                             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                                 focusSel->cursor = i;
@@ -3429,7 +3543,7 @@ int main(int argc, char** argv) {
                         p2sel.confirmed = true;
                     }
                     for (int i = 0; i < CHAR_COUNT; i++) {
-                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor);
+                        Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor, false, 0);
                         if (CheckCollisionPointRec(mousePos, card) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                             if (!p1sel.confirmed) p1sel.cursor = i;
                             else if (!p2sel.confirmed) p2sel.cursor = i;
@@ -3616,9 +3730,10 @@ int main(int argc, char** argv) {
                 break;
 
             case STATE_BATTLE:
-                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
+                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT, (p1.hitbox.x + p2.hitbox.x) * 0.5f);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
+                FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true,
                                 round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
@@ -3629,16 +3744,18 @@ int main(int argc, char** argv) {
                 DrawHUD(&p1, &p2, domainTimer, false, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
+                DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 break;
 
             case STATE_DOMAIN: {
                 Fighter* caster = (domainCasterPlayer == 1) ? &p1 : &p2;
                 Fighter* target = (domainCasterPlayer == 1) ? &p2 : &p1;
-                DrawFightVideoBackground(&fightVideo, true, caster->charData.id);
+                DrawFightVideoBackground(&fightVideo, true, caster->charData.id, (p1.hitbox.x + p2.hitbox.x) * 0.5f);
                 DrawDomainBackground(caster->charData.id, domainTimer, SCREEN_W, SCREEN_H);
                 DrawRectangle(0, 0, SCREEN_W, SCREEN_H, (Color){0, 0, 0, 26});
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
+                FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true,
                                 round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
@@ -3649,6 +3766,7 @@ int main(int argc, char** argv) {
                 DrawHUD(&p1, &p2, domainTimer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
+                DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 if (target->isHeavenlyRestricted) {
                     const char* imm = "[ HEAVENLY RESTRICTION - DOMAIN STUN IMMUNE ]";
                     int iw = MeasureText(imm, 14);
@@ -3658,16 +3776,18 @@ int main(int argc, char** argv) {
             }
 
             case STATE_DOMAIN_CLASH:
-                DrawFightVideoBackground(&fightVideo, true, CHAR_COUNT);
+                DrawFightVideoBackground(&fightVideo, true, CHAR_COUNT, (p1.hitbox.x + p2.hitbox.x) * 0.5f);
                 DrawDomainClashScene(&p1, &p2, clash.timer, clash.duration,
                                      clash.winnerPlayer, clash.damage, SCREEN_W, SCREEN_H);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
+                FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true, -1.0f, domainCasterPlayer == 1, domainCasterPlayer == 2);
                 DrawFighterBody(&p2, false, -1.0f, domainCasterPlayer == 2, domainCasterPlayer == 1);
                 DrawHUD(&p1, &p2, clash.timer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.introTimer);
+                DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 break;
 
             case STATE_PAUSE:
@@ -3681,15 +3801,17 @@ int main(int argc, char** argv) {
                         ? ((p2.hp <= 0.0f) ? "YOU WIN!" : "COMPUTER WINS!")
                         : ((p2.hp <= 0.0f) ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!"));
                 Color winCol = (p2.hp <= 0.0f) ? p1.charData.bodyColor : p2.charData.bodyColor;
-                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT);
+                DrawFightVideoBackground(&fightVideo, false, CHAR_COUNT, (p1.hitbox.x + p2.hitbox.x) * 0.5f);
                 DrawArena(SCREEN_W, SCREEN_H, FLOOR_Y);
                 ParticleDraw();
+                FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true, -1.0f, false, false);
                 DrawFighterBody(&p2, false, -1.0f, false, false);
                 DrawHUD(&p1, &p2, 0.0f, false, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
                         round.bannerText, round.subText, round.endTimer);
                 DrawGameOverOverlay(winTxt, winCol, SCREEN_W, SCREEN_H);
+                DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 break;
             }
         }

@@ -182,17 +182,18 @@ bool DrawGojoSprite(const Fighter* fighter, bool isP1, float introProgress,
     float width;
 
     if (!gGojoSpritePack.ready || fighter->charData.id != CHAR_GOJO) return false;
+    (void)isP1;
 
     frame = GojoChooseFrame(fighter, introProgress, domainCast, domainCounter);
     if (frame == 0 || !gGojoSpritePack.loaded[frame]) return false;
 
     texture = &gGojoSpritePack.frames[frame];
     src = (Rectangle){0.0f, 0.0f, (float)texture->width, (float)texture->height};
-    if (!isP1) {
+    if (fighter->facingDir < 0) {
         src.width = -src.width;
     }
 
-    baseHeight = fighter->hitbox.height * 2.55f;
+    baseHeight = fighter->hitbox.height * 1.02f;
     aspect = (float)texture->width / (float)texture->height;
     width = baseHeight * aspect;
     dst = (Rectangle){

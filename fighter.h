@@ -93,7 +93,8 @@ typedef struct Fighter {
     float           knockbackVelX;
     bool            isBlocking;
     bool            isKnockedDown;
-    int             wakeupFrames;
+    int             knockdownFrames;
+    int             wakeupInvincFrames;
 
     bool            isDodging;
     int             dodgeFrames;
@@ -116,6 +117,12 @@ typedef struct Fighter {
     bool            dollMarked;
     float           dollTimer;
     float           resonanceCooldown;
+    float           rctCooldown;
+    float           ceAttackCooldown;
+    float           abilityECooldown;
+    float           abilityRCooldown;
+    float           abilityFCooldown;
+    float           rctGlowTimer;
     float           lastDamageTaken;
     float           ratioBonusDamage;
     float           wallBounceVelocity;

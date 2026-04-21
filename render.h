@@ -66,6 +66,23 @@ void AnnounceDraw(int screenW, int screenH);
 void SetUIFont(Font font, bool loaded);
 void SetGojoPortrait(Texture2D portrait, bool loaded);
 
+typedef struct {
+    Vector2 pos;
+    char text[16];
+    Color color;
+    float life;
+    float maxLife;
+    bool active;
+} FloatingText;
+
+extern FloatingText gFloatingTexts[16];
+void FloatingTextSpawn(Vector2 pos, const char* text, Color color, float life);
+void FloatingTextUpdate(void);
+void FloatingTextDraw(void);
+void TriggerRCTFlash(void);
+void DrawRCTFlashOverlay(int screenW, int screenH);
+void SpawnRCTBurst(Vector2 center);
+
 void DrawDomainBackground(CharacterID casterID, float timer, int screenW, int screenH);
 void DrawDomainClashScene(Fighter* p1, Fighter* p2, float timer, float duration,
                           int winnerPlayer, float clashDamage, int screenW, int screenH);

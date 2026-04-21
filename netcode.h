@@ -25,13 +25,15 @@ typedef struct {
     bool jump;
     bool crouch;
     bool attack;
+    bool ceAttack;
     bool rct;
     bool domain;
     bool dodge;
-    bool ability1;
-    bool ability2;
-    bool ability3;
     bool ult;
+    bool block;
+    bool abilityE;
+    bool abilityR;
+    bool abilityF;
 } NetInput;
 
 typedef enum {
