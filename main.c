@@ -50,9 +50,9 @@
 #define DOMAIN_TOJI_DAMAGE      75.0f
 
 #define RCT_CE_COST             40.0f
-#define RCT_HEAL_AMOUNT         30.0f
+#define RCT_HEAL_AMOUNT         100.0f
 #define CE_ATTACK_COST          15.0f
-#define DOMAIN_CE_COST          50.0f
+#define DOMAIN_CE_COST          0.10f // 10% of max CE pack
 #define CE_REGEN_RATE            0.025f
 
 #define DODGE_FRAMES            18
@@ -159,6 +159,9 @@ typedef struct {
     bool matchPoint;
     char bannerText[64];
     char subText[64];
+    float countdownTimer; /* 3..0 countdown */
+    float fightBannerTimer; /* FIGHT! shown for 2s */
+    bool countdownDone;
 } RoundState;
 
 typedef struct {
@@ -1093,6 +1096,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
                                 (Color){255, 90, 90, 255});
                 f->specialAnimFrames = 10;
                 TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_DISMANTLE, 0.35f);
+                TriggerSukunaSfx(VISUAL_EVENT_SUKUNA_DISMANTLE);
             }
             break;
 
@@ -1173,6 +1177,7 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             Rectangle cleave = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -76.0f), f->hitbox.y + 10.0f, 76.0f, 60.0f };
             f->specialAnimFrames = 14;
             TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_CLEAVE, 0.45f);
+            TriggerSukunaSfx(VISUAL_EVENT_SUKUNA_CLEAVE);
             if (HorizontalGap(f, opponent) < 82.0f && CheckCollisionRecs(cleave, opponent->hurtbox)) {
                 ApplyCombatHit(f, opponent, 46.0f, 62.0f, 14, false, true, false, PARTICLE_SLASH_TRAIL, 20, false, 2);
             }
@@ -1263,6 +1268,7 @@ static void UseAbility3(Fighter* f, bool ownerIsP1) {
                     42.0f, 18.0f
                 };
                 TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_FUGA, 0.45f);
+                TriggerSukunaSfx(VISUAL_EVENT_SUKUNA_FUGA);
                 ParticleSpawnBurst((Vector2){f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y + f->hitbox.height}, 25, (Color){255, 120, 30, 255}, 0.5f, 5.0f, 10.0f, PARTICLE_SPARK);
             }
             break;
@@ -1874,7 +1880,7 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
     if (enemyUlting && gap < 180.0f) input.block = true;
     if (enemyUlting && gap < 140.0f) input.dodge = true;
     if (lowHealth && cpu->cursedEnergy >= CalcRCTCost(cpu) && gap > 150.0f) input.rct = true;
-    if (canDomainCounter && cpu->hasDomain && cpu->cursedEnergy >= CalcCECost(cpu, DOMAIN_CE_COST)) input.domain = true;
+    if (canDomainCounter && cpu->hasDomain && cpu->cursedEnergy >= cpu->maxCE * DOMAIN_CE_COST) input.domain = true;
     if (state == STATE_BATTLE && fullCe && gap > 120.0f && cpu->hasDomain && aggro > 0.65f) input.domain = true;
     if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.abilityF = true;
 
@@ -2087,7 +2093,7 @@ static void UpdateAttackCooldown(Fighter* f) {
 
 static void StartDomain(Fighter* caster, Fighter* target, bool isP1,
                         GameState* state, int* domainCasterPlayer, float* domainTimer) {
-    float ceCost = CalcCECost(caster, DOMAIN_CE_COST);
+    float ceCost = caster->maxCE * DOMAIN_CE_COST; /* 10% of max CE */
     if (caster->isHeavenlyRestricted || !caster->hasDomain || caster->cursedEnergy < ceCost) return;
 
     caster->cursedEnergy -= ceCost;
@@ -2109,7 +2115,7 @@ static void StartDomain(Fighter* caster, Fighter* target, bool isP1,
 
 static void TriggerDomainClash(Fighter* challenger, Fighter* caster, bool challengerIsP1,
                                GameState* state, float* domainTimer, DomainClashState* clash) {
-    float ceCost = CalcCECost(challenger, DOMAIN_CE_COST);
+    float ceCost = challenger->maxCE * DOMAIN_CE_COST; /* 10% of max CE */
     int challengerPlayer = challengerIsP1 ? 1 : 2;
     int casterPlayer = challengerIsP1 ? 2 : 1;
 
@@ -2126,15 +2132,21 @@ static void TriggerDomainClash(Fighter* challenger, Fighter* caster, bool challe
     clash->active   = true;
     clash->timer    = DOMAIN_CLASH_DURATION;
     clash->duration = DOMAIN_CLASH_DURATION;
-    clash->damage   = fabsf(caster->cursedEnergy - challenger->cursedEnergy);
-
-    if (fabsf(caster->cursedEnergy - challenger->cursedEnergy) < 0.5f) {
-        clash->winnerPlayer = 0;
-        clash->damage = 0.0f;
-    } else if (challenger->cursedEnergy > caster->cursedEnergy) {
-        clash->winnerPlayer = challengerPlayer;
-    } else {
-        clash->winnerPlayer = casterPlayer;
+    /* Proportional CE comparison: ratio of (my CE / maxCE) vs opponent */
+    { float chalRatio = (challenger->maxCE > 0.0f) ? challenger->cursedEnergy / challenger->maxCE : 0.0f;
+      float castRatio = (caster->maxCE > 0.0f)    ? caster->cursedEnergy    / caster->maxCE    : 0.0f;
+      float diff = chalRatio - castRatio;
+      float dmgBase = 80.0f;
+      if (fabsf(diff) < 0.03f) {
+          clash->winnerPlayer = 0;
+          clash->damage = 0.0f;
+      } else if (diff > 0.0f) {
+          clash->winnerPlayer = challengerPlayer;
+          clash->damage = dmgBase * diff;
+      } else {
+          clash->winnerPlayer = casterPlayer;
+          clash->damage = dmgBase * (-diff);
+      }
     }
 
     *state = STATE_DOMAIN_CLASH;
@@ -2475,6 +2487,9 @@ static void ResetRoundState(RoundState* round) {
     round->endTimer = 0.0f;
     round->roundActive = false;
     round->matchPoint = false;
+    round->countdownTimer = 3.0f;
+    round->fightBannerTimer = 0.0f;
+    round->countdownDone = false;
     snprintf(round->bannerText, sizeof(round->bannerText), "ROUND 1");
     snprintf(round->subText, sizeof(round->subText), "FIGHT");
 }
@@ -2489,6 +2504,9 @@ static void StartNextRound(RoundState* round, Fighter* p1, Fighter* p2,
     round->introTimer = ROUND_INTRO_TIME;
     round->endTimer = 0.0f;
     round->roundActive = false;
+    round->countdownTimer = 3.0f;
+    round->fightBannerTimer = 0.0f;
+    round->countdownDone = false;
     snprintf(round->bannerText, sizeof(round->bannerText), "ROUND %d", round->roundNumber);
     snprintf(round->subText, sizeof(round->subText), "FIGHT");
 }
@@ -2522,13 +2540,26 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     p1->prevX = p1->hitbox.x;
     p2->prevX = p2->hitbox.x;
 
-    if (round->introTimer > 0.0f) {
-        round->introTimer -= GetFrameTime();
-        if (round->introTimer <= 0.0f) {
-            round->introTimer = 0.0f;
-            round->roundActive = true;
+    /* 3-2-1 countdown then FIGHT! */
+    if (!round->countdownDone) {
+        if (round->countdownTimer > 0.0f) {
+            round->countdownTimer -= GetFrameTime();
+            if (round->countdownTimer < 0.0f) round->countdownTimer = 0.0f;
+            int cnt = (int)ceilf(round->countdownTimer);
+            snprintf(round->bannerText, sizeof(round->bannerText), "%d", cnt > 0 ? cnt : 1);
+            round->subText[0] = '\0';
+        } else if (round->fightBannerTimer < 2.0f) {
+            round->fightBannerTimer += GetFrameTime();
+            snprintf(round->bannerText, sizeof(round->bannerText), "FIGHT!");
+            round->subText[0] = '\0';
+            if (!round->roundActive) round->roundActive = true;
+        } else {
+            round->countdownDone = true;
+            round->bannerText[0] = '\0';
+            round->subText[0] = '\0';
         }
-        canAct = false;
+        if (round->countdownTimer > 0.0f) canAct = false; /* freeze until countdown hits 0 */
+        round->introTimer = 0.0f; /* neutralise old system */
     }
 
     if (round->roundActive && (*state == STATE_BATTLE || *state == STATE_DOMAIN || *state == STATE_DOMAIN_CLASH)) {
@@ -3096,6 +3127,7 @@ int main(int argc, char** argv) {
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
     LoadGojoSpritePack("assets/sprites/gojo");
     LoadSukunaSpritePack("assets/sprites/meguna");
+    LoadSukunaSfx("assets/sounds/meguna");
     LoadYujiSpritePack("assets/sprites/yuji_s1");
     LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
@@ -3126,12 +3158,13 @@ int main(int argc, char** argv) {
 
     while (!WindowShouldClose()) {
 
-        if (state == STATE_BATTLE && prevState != STATE_BATTLE && prevState != STATE_PAUSE) {
-            int rnd = GetRandomValue(1, 3);
+        /* Battle music: pick once per match (not per round) */
+        if (state == STATE_BATTLE && prevState == STATE_CHAR_SELECT) {
             if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
-            if (rnd == 1) bgm = LoadMusicStream("assets/music/track1.mp3");
-            else if (rnd == 2) bgm = LoadMusicStream("assets/music/track2.mp3");
-            else bgm = LoadMusicStream("assets/music/track3.mp3");
+            { int rndB = GetRandomValue(0, 2);
+              if (rndB == 0) bgm = LoadMusicStream("assets/music/track2.mp3");
+              else if (rndB == 1) bgm = LoadMusicStream("assets/music/track3.mp3");
+              else bgm = LoadMusicStream("assets/menu_theme.mp3"); }
             SetMusicVolume(bgm, 0.60f);
             PlayMusicStream(bgm);
             musicLoaded = true;
@@ -3188,11 +3221,9 @@ int main(int argc, char** argv) {
             if (GetKeyPressed() > 0) {
                 state = STATE_MAIN_MENU;
                 if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
-                int rnd = GetRandomValue(1, 4);
-                if (rnd == 1) bgm = LoadMusicStream("assets/music/track1.mp3");
-                else if (rnd == 2) bgm = LoadMusicStream("assets/music/track2.mp3");
-                else if (rnd == 3) bgm = LoadMusicStream("assets/music/track3.mp3");
-                else bgm = LoadMusicStream("assets/menu_theme.mp3");
+                { int rndM = GetRandomValue(0, 1);
+                  if (rndM == 0) bgm = LoadMusicStream("assets/music/track1.mp3");
+                  else bgm = LoadMusicStream("assets/menu_theme.mp3"); }
                 SetMusicVolume(bgm, 0.60f);
                 PlayMusicStream(bgm);
                 musicLoaded = true;

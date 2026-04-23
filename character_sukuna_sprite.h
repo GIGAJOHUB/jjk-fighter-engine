@@ -10,6 +10,10 @@ void UnloadSukunaSpritePack(void);
 bool SukunaSpritePackReady(void);
 bool DrawSukunaSprite(const Fighter* fighter, bool isP1, float introProgress,
                       bool domainCast, bool domainCounter);
+void TriggerSukunaSfx(int visualEvent);
+void TriggerSukunaAttackSfx(void);
+void TriggerSukunaDomainSfx(void);
+void LoadSukunaSfx(const char* soundDir);
 
 #ifdef CHARACTER_SUKUNA_SPRITE_IMPLEMENTATION
 
@@ -134,22 +138,23 @@ void LoadSukunaSpritePack(const char* folderPath) {
     /* Based on MUGEN Sukuna Ryomen S1: 
        Idle: 0, Walk: 20, Jump: 40, Crouch: 10, Block: 120, Hit: 5000, etc.
     */
-    SukunaBuildAnim(SUKU_ANIM_IDLE,         10000, 10);
-    SukunaBuildAnim(SUKU_ANIM_WALK,         10020, 10);
-    SukunaBuildAnim(SUKU_ANIM_JUMP,         10040, 10);
-    SukunaBuildAnim(SUKU_ANIM_CROUCH,       10010, 10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_LIGHT, 11000, 10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_MED,   11000, 10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_HEAVY, 11000, 10);
-    SukunaBuildAnim(SUKU_ANIM_BLOCK,        10000, 10);
-    SukunaBuildAnim(SUKU_ANIM_HIT,          10000, 10);
-    SukunaBuildAnim(SUKU_ANIM_KNOCKDOWN,    10500, 20);
-    SukunaBuildAnim(SUKU_ANIM_DODGE,        10040, 10);
-    SukunaBuildAnim(SUKU_ANIM_SPECIAL1,     11000, 20);
-    SukunaBuildAnim(SUKU_ANIM_SPECIAL2,     15000, 20);
-    SukunaBuildAnim(SUKU_ANIM_DOMAIN,       10000, 50);
-    SukunaBuildAnim(SUKU_ANIM_INTRO,        10000, 20);
-    SukunaBuildAnim(SUKU_ANIM_ULT,          18400, 20);
+    /* Verified group IDs from MegunaV5 SFF extraction */
+    SukunaBuildAnim(SUKU_ANIM_IDLE,         10000, 20);  /* idle breathing loop */
+    SukunaBuildAnim(SUKU_ANIM_WALK,            20, 20);  /* walk cycle */
+    SukunaBuildAnim(SUKU_ANIM_JUMP,            40, 10);  /* jump arc */
+    SukunaBuildAnim(SUKU_ANIM_CROUCH,          10, 10);  /* crouch */
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_LIGHT,   200, 30);  /* light jabs */
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_MED,     201, 20);  /* medium strikes */
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_HEAVY,   210, 30);  /* heavy combo */
+    SukunaBuildAnim(SUKU_ANIM_BLOCK,         1000, 10);  /* guard stance */
+    SukunaBuildAnim(SUKU_ANIM_HIT,           5000, 10);  /* hit reaction */
+    SukunaBuildAnim(SUKU_ANIM_KNOCKDOWN,      210, 50);  /* tumble/fall */
+    SukunaBuildAnim(SUKU_ANIM_DODGE,        10040, 10);  /* step dodge */
+    SukunaBuildAnim(SUKU_ANIM_SPECIAL1,     11000, 20);  /* Dismantle slash */
+    SukunaBuildAnim(SUKU_ANIM_SPECIAL2,     15000, 20);  /* Cleave sweep */
+    SukunaBuildAnim(SUKU_ANIM_DOMAIN,       20300, 80);  /* Malevolent Shrine */
+    SukunaBuildAnim(SUKU_ANIM_INTRO,         9898, 20);  /* intro pose */
+    SukunaBuildAnim(SUKU_ANIM_ULT,          18400, 30);  /* Fuga Musou */
 
     /* Preload core animations */
     for (int a = SUKU_ANIM_IDLE; a <= SUKU_ANIM_WALK; a++) {
@@ -273,13 +278,66 @@ static SpriteRef SukunaChooseFrame(const Fighter* fighter, float introProgress, 
     return SukunaAnimFrame(SUKU_ANIM_IDLE, 0.16f, true);
 }
 
+/* --- Sukuna SFX ---
+ * Group 980 sounds from MUGEN CNS:
+ *   s980_0 = attack grunt, s980_1 = slash whoosh, s980_2 = heavy hit,
+ *   s980_3 = cleave, s980_4 = domain cast, s980_5 = vocal yell,
+ *   s980_7 = Dismantle, s980_10 = ultimate charge, s980_14 = Fuga blast
+ */
+#define SUKU_SFX_COUNT 8
+typedef struct { Sound snd; bool loaded; } SukunaSfx;
+static SukunaSfx gSfxAttack   = {0}; /* s980_0  */
+static SukunaSfx gSfxSlash    = {0}; /* s980_1  */
+static SukunaSfx gSfxCleave   = {0}; /* s980_3  */
+static SukunaSfx gSfxDomain   = {0}; /* s980_4  */
+static SukunaSfx gSfxYell     = {0}; /* s980_5  */
+static SukunaSfx gSfxDismantle= {0}; /* s980_7  */
+static SukunaSfx gSfxUltCharge= {0}; /* s980_10 */
+static SukunaSfx gSfxFuga     = {0}; /* s980_14 */
+
+void LoadSukunaSfx(const char* soundDir) {
+    char p[256];
+#define TRY_LOAD(sfxVar, filename) \
+    snprintf(p, sizeof(p), "%s/" filename, soundDir); \
+    if (FileExists(p)) { sfxVar.snd = LoadSound(p); sfxVar.loaded = true; }
+    TRY_LOAD(gSfxAttack,    "s980_0.wav")
+    TRY_LOAD(gSfxSlash,     "s980_1.wav")
+    TRY_LOAD(gSfxCleave,    "s980_3.wav")
+    TRY_LOAD(gSfxDomain,    "s980_4.wav")
+    TRY_LOAD(gSfxYell,      "s980_5.wav")
+    TRY_LOAD(gSfxDismantle, "s980_7.wav")
+    TRY_LOAD(gSfxUltCharge, "s980_10.wav")
+    TRY_LOAD(gSfxFuga,      "s980_14.wav")
+#undef TRY_LOAD
+}
+
+static void PlaySukunaSfxInternal(SukunaSfx* s, float vol) {
+    if (s->loaded && !IsSoundPlaying(s->snd)) {
+        SetSoundVolume(s->snd, vol);
+        PlaySound(s->snd);
+    }
+}
+
+/* Call this from main when visual events fire */
+void TriggerSukunaSfx(int visualEvent) {
+    switch(visualEvent) {
+        case VISUAL_EVENT_SUKUNA_DISMANTLE: PlaySukunaSfxInternal(&gSfxDismantle, 0.75f); break;
+        case VISUAL_EVENT_SUKUNA_CLEAVE:    PlaySukunaSfxInternal(&gSfxCleave,    0.75f); break;
+        case VISUAL_EVENT_SUKUNA_FUGA:      PlaySukunaSfxInternal(&gSfxFuga,      0.85f); break;
+        default: break;
+    }
+}
+void TriggerSukunaAttackSfx(void) { PlaySukunaSfxInternal(&gSfxAttack, 0.65f); }
+void TriggerSukunaDomainSfx(void) { PlaySukunaSfxInternal(&gSfxDomain, 0.80f); }
+
 bool DrawSukunaSprite(const Fighter* fighter, bool isP1, float introProgress,
                       bool domainCast, bool domainCounter) {
     if (!gSukuna.ready || fighter->charData.id != CHAR_SUKUNA) return false;
 
     SpriteRef ref = SukunaChooseFrame(fighter, introProgress, domainCast, domainCounter);
     SukunaTexEntry* entry = SukunaGetTex(ref.group, ref.item);
-    if (!entry || entry->tex.id == 0) return false;
+    /* Guard: skip if texture failed to load (prevents black squares) */
+    if (!entry || !entry->valid || entry->tex.id == 0 || entry->tex.width == 0) return false;
 
     float scale = 1.6f;
     float drawW = (float)entry->tex.width * scale;
@@ -288,20 +346,19 @@ bool DrawSukunaSprite(const Fighter* fighter, bool isP1, float introProgress,
     float cx = fighter->hitbox.x + fighter->hitbox.width * 0.5f;
     float by = fighter->hitbox.y + fighter->hitbox.height;
 
-    Rectangle source = { 0, 0, (float)entry->tex.width, (float)entry->tex.height };
-    
+    float absW = (float)(entry->tex.width < 0 ? -entry->tex.width : entry->tex.width);
+    Rectangle source = { 0, 0, absW, (float)entry->tex.height };
+
     float destX;
     if (fighter->facingDir < 0) {
-        source.width = -source.width;
-        /* Flip logic with offsets: center - (width - axisx) */
-        destX = cx - (entry->tex.width - entry->axisx) * scale;
+        source.width = -absW;  /* flip horizontally */
+        destX = cx - (absW - (float)entry->axisx) * scale;
     } else {
-        destX = cx - entry->axisx * scale;
+        destX = cx - (float)entry->axisx * scale;
     }
-    float destY = by - entry->axisy * scale;
+    float destY = by - (float)entry->axisy * scale;
 
     Rectangle dest = { destX, destY, drawW, drawH };
-
     DrawTexturePro(entry->tex, source, dest, (Vector2){0, 0}, 0.0f, WHITE);
     return true;
 }
