@@ -1,0 +1,35 @@
+[Info]
+name ="Sukuna"
+displayname ="Sukuna (DrAnimation/Aikijinx)"
+versiondate =3/12/2025
+mugenversion = 1.1
+author ="DrAnimation";JOEY JOESTAR
+
+[Files]
+sprite = KingRyomenSukuna.sff
+anim = KingRyomenSukuna.air
+sound = KingRyomenSukuna.snd
+cmd = KingRyomenSukuna.cmd
+cns = KingRyomenSukuna.cns
+st = KingRyomenSukuna.cns
+stcommon = common1.cns
+st1 = Hien Era.cns
+st2 = IA.cns
+st3 = Specials.cns
+st4 = Mahoraga.cns
+st5 = OldSukuna.cns
+st6 = Hien Specials.cns
+st7 = uruame.cns
+pal1 = 1.act
+
+[Palette Keymap]
+a=1
+b=2
+c=3
+x=4
+y=5
+z=6
+
+[Arcade]
+intro.storyboard = 
+ending.storyboard = 

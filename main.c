@@ -3,6 +3,8 @@
 #include "netcode.h"
 #include "render.h"
 #include "character_gojo_sprite.h"
+#include "character_sukuna_sprite.h"
+#include "character_yuji_sprite.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -353,11 +355,11 @@ static void SetDefaultControls(void) {
     gControls[0].keys[ACT_BLOCK] = BIND_MOUSE_RIGHT;
     gControls[0].keys[ACT_TOOL1] = KEY_ONE;
     gControls[0].keys[ACT_RCT] = KEY_R;
-    gControls[0].keys[ACT_DOMAIN] = KEY_H;
+    gControls[0].keys[ACT_DOMAIN] = KEY_S;
     gControls[0].keys[ACT_DASH] = KEY_Q;
-    gControls[0].keys[ACT_ABILITY1] = KEY_E;
-    gControls[0].keys[ACT_ABILITY2] = KEY_F;
-    gControls[0].keys[ACT_ABILITY3] = KEY_G;
+    gControls[0].keys[ACT_ABILITY1] = KEY_ONE;
+    gControls[0].keys[ACT_ABILITY2] = KEY_TWO;
+    gControls[0].keys[ACT_ABILITY3] = KEY_THREE;
     gControls[0].keys[ACT_ULT] = KEY_X;
 
     gControls[1].keys[ACT_LEFT] = KEY_LEFT;
@@ -829,10 +831,7 @@ static Projectile* SpawnProjectile(ProjectileType type, const Fighter* owner, bo
 static bool IsInfinityBlocking(const Fighter* attacker, Fighter* target, bool bypassInfinity, float* damageScale) {
     if (bypassInfinity || target->charData.id != CHAR_GOJO || !target->infinityActive) return false;
 
-    if (attacker->charData.id == CHAR_TOJI) {
-        *damageScale *= 0.6f;
-        return false;
-    }
+    /* Infinity blocks ALL hits - only Domain penetrates */
 
     ParticleSpawnBurst(
         (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
@@ -905,15 +904,47 @@ static bool ApplyCombatHit(Fighter* attacker, Fighter* target, float damage, flo
         }
     }
 
+    /* Guard & dizzy system */
+    if (target->isDizzy) {
+        damageScale *= 1.35f;  /* Dizzy takes bonus damage */
+    }
+
     blocking = target->isBlocking && !target->isHeavenlyRestricted && !bypassInfinity;
     if (blocking) {
-        damage *= 0.08f;
-        displacement = 18.0f;
-        stunFrames = 12;
-        ParticleSpawnBurst(
-            (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
-            12, (Color){215, 225, 235, 255}, 3.0f, 0.25f, 3.2f, PARTICLE_SPARK
-        );
+        /* SF2-style guard meter drain */
+        float guardDrain = damage * 0.15f;
+        target->guardMeter -= guardDrain;
+        if (target->guardMeter <= 0.0f) {
+            /* GUARD BREAK! */
+            target->guardMeter = 0.0f;
+            target->guardBreakStun = 45;
+            target->isBlocking = false;
+            blocking = false;
+            damage *= 0.5f;  /* Guard break hit does half damage */
+            stunFrames = 30;
+            ShakeTrigger(14.0f, 0.4f);
+            ParticleSpawnBurst(
+                (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
+                28, (Color){255, 180, 50, 255}, 5.0f, 0.45f, 5.0f, PARTICLE_SPARK
+            );
+        } else {
+            /* Normal block: chip damage */
+            damage *= 0.08f;
+            displacement = 18.0f;
+            stunFrames = 12;
+            ParticleSpawnBurst(
+                (Vector2){ target->hitbox.x + target->hitbox.width * 0.5f, target->hitbox.y + target->hitbox.height * 0.5f },
+                12, (Color){215, 225, 235, 255}, 3.0f, 0.25f, 3.2f, PARTICLE_SPARK
+            );
+        }
+    } else {
+        /* Not blocking: accumulate dizzy */
+        target->dizzyMeter += damage * 0.12f;
+        if (target->dizzyMeter >= target->dizzyMax && !target->isDizzy) {
+            target->isDizzy = true;
+            target->dizzyFrames = 90;  /* ~1.5 sec dizzy */
+            target->dizzyMeter = 0.0f;
+        }
     }
 
     target->hp -= damage * damageScale;
@@ -1463,6 +1494,11 @@ static void ApplyPhysics(Fighter* f) {
         f->onGround = true;
     }
 
+    /* Always anchor on-ground fighters to floor (handles crouch height changes) */
+    if (f->onGround) {
+        f->hitbox.y = FLOOR_Y - f->hitbox.height;
+    }
+
     if (!wasOnGround && f->onGround) {
         f->landingRecoverTimer = 0.14f;
     }
@@ -1757,21 +1793,60 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
 
     if (cpu->hitStunFrames > 0 || cpu->isKnockedDown) return input;
 
-    if (player->hitbox.x + player->hitbox.width * 0.5f < cpu->hitbox.x + cpu->hitbox.width * 0.5f) {
-        input.left = true;
+    /* ---- NON-SYMMETRIC MOVEMENT AI ---- */
+    /* CPU picks a preferred spacing distance and only approaches/retreats
+       based on randomized decisions, NOT by always mirroring the player. */
+    float cpuCX = cpu->hitbox.x + cpu->hitbox.width * 0.5f;
+    float plrCX = player->hitbox.x + player->hitbox.width * 0.5f;
+    bool cpuIsRight = (cpuCX > plrCX);
+    float preferredGap = 100.0f + (float)(GetRandomValue(0, 60));
+    
+    /* Every few frames, decide whether to approach, retreat, or hold position */
+    int moveDecision = GetRandomValue(0, 100);
+    
+    if (gap > 250.0f) {
+        /* Very far: approach most of the time, but occasionally hold */
+        if (moveDecision < 75) {
+            input.left = cpuIsRight;
+            input.right = !cpuIsRight;
+        }
+        /* 25% of the time: stand still or jump approach */
+        if (moveDecision > 90 && cpu->onGround) input.jump = true;
+    } else if (gap > preferredGap + 30.0f) {
+        /* Outside preferred range: approach cautiously */
+        if (moveDecision < 55) {
+            input.left = cpuIsRight;
+            input.right = !cpuIsRight;
+        } else if (moveDecision < 70) {
+            /* Hold position */
+        } else if (moveDecision < 85) {
+            /* Dodge/sidestep */
+            input.dodge = true;
+        }
+    } else if (gap < 55.0f && difficulty != CPU_EASY) {
+        /* Too close: sometimes back off, sometimes press the attack */
+        if (moveDecision < 35) {
+            /* Back away */
+            input.left = !cpuIsRight;
+            input.right = cpuIsRight;
+        } else if (moveDecision < 60) {
+            /* Hold and attack */
+        } else {
+            /* Crossup: jump over the player */
+            input.jump = true;
+            input.left = cpuIsRight;
+            input.right = !cpuIsRight;
+        }
     } else {
-        input.right = true;
-    }
-
-    if (gap > (difficulty == CPU_EASY ? 240.0f : 180.0f)) {
-        input.left = (player->hitbox.x < cpu->hitbox.x);
-        input.right = !input.left;
-    } else if (gap < 68.0f && difficulty != CPU_EASY) {
-        input.left = (player->hitbox.x > cpu->hitbox.x);
-        input.right = !input.left;
-    } else {
-        input.left = false;
-        input.right = false;
+        /* In comfortable range: mostly hold, occasionally adjust */
+        if (moveDecision < 20) {
+            input.left = cpuIsRight;
+            input.right = !cpuIsRight;
+        } else if (moveDecision < 30) {
+            input.left = !cpuIsRight;
+            input.right = cpuIsRight;
+        }
+        /* 70% of the time: stand still and fight from spacing */
     }
 
     if (enemyUlting && gap < 180.0f) input.block = true;
@@ -2691,15 +2766,20 @@ static void DrawCpuDifficultyMenu(const MenuVideo* video, int cursor) {
 
 static void DrawKeybindMenu(const MenuVideo* video, const FrontendState* frontend) {
     static const char* kitLines[] = {
-        "GOJO: E BLUE | F RED | G INFINITY | H DOMAIN | X PURPLE",
-        "SUKUNA: E DISMANTLE | F CLEAVE | H DOMAIN | X FUGA",
-        "YUTA: E KATANA | F RIKA | H DOMAIN | X LOVE BEAM",
-        "YUJI: E BLACK FLASH FLOW | H SURVIVE | X BLACK FLASH",
-        "TOJI: E ASSAULT | F WEAPON FLOW | G INSTINCT | X HEAVENLY ASSAULT",
-        "MEGUMI: E NUE | F DOGS | G SHADOW SETUP | H DOMAIN | X MAHORAGA",
-        "NANAMI: E RATIO | F COLLAPSE | G OVERTIME | X OVERTIME SLASH",
-        "NOBARA: E NAIL | F RESONANCE | G HAIRPIN | X MAXIMUM",
-        "TODO: E STRIKE | F BOOGIE | G CLAP | X TACKLE"
+        "CONTROLS: A/D MOVE | SPACE JUMP | MOUSE L/R ATTACK/BLOCK",
+        "R: CURSED REVERSAL (HEAL) | S: DOMAIN/SIMPLE DOMAIN",
+        "Q: DASH | X: ULTIMATE | SHIFT: CROUCH",
+        "",
+        "--- CHARACTER ABILITIES (1 / 2 / 3) ---",
+        "GOJO:   1 BLUE | 2 RED | 3 INFINITY | X HOLLOW PURPLE",
+        "SUKUNA: 1 DISMANTLE | 2 CLEAVE | 3 FLAME | X FUGA",
+        "YUTA:   1 KATANA | 2 RIKA | 3 COPY | X PURE LOVE BEAM",
+        "YUJI:   1 BF FLOW | 2 DIVERGE | 3 PIVOT | X BLACK FLASH",
+        "TOJI:   1 ASSAULT | 2 WEAPON | 3 INSTINCT | X HEAVENLY ASSAULT",
+        "MEGUMI: 1 NUE | 2 DOGS | 3 SHADOW | X MAHORAGA",
+        "NANAMI: 1 RATIO | 2 COLLAPSE | 3 OVERTIME | X OVERTIME SLASH",
+        "NOBARA: 1 NAIL | 2 RESONANCE | 3 HAIRPIN | X MAXIMUM",
+        "TODO:   1 STRIKE | 2 BOOGIE WOOGIE | 3 CLAP | X TACKLE"
     };
     int kitCount = (int)(sizeof(kitLines) / sizeof(kitLines[0]));
     float contentY = 118.0f - frontend->keybindScroll;
@@ -2881,7 +2961,7 @@ static void UpdateFightVideo(FightVideo* video) {
 
 static void DrawFightVideoBackground(const FightVideo* video, bool domainActive, CharacterID casterId, float focalX) {
     if (video->count > 0 && IsTextureValid(video->frames[video->currentFrame])) {
-        float zoom = 2.0f;
+        float zoom = 1.7f;
         float srcW = (float)video->frames[video->currentFrame].width / zoom;
         float srcH = (float)video->frames[video->currentFrame].height / zoom;
         float focalNorm = focalX / (float)SCREEN_W;
@@ -2993,6 +3073,8 @@ int main(int argc, char** argv) {
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
     LoadGojoSpritePack("assets/sprites/gojo");
+    LoadSukunaSpritePack("assets/sprites/sukuna_s1");
+    LoadYujiSpritePack("assets/sprites/yuji_s1");
     LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
     GameState state = STATE_MAIN_MENU;
@@ -3456,8 +3538,8 @@ int main(int argc, char** argv) {
                 if (matchMode == MATCH_MODE_ONLINE) {
                     SelectState* localSel = (mpMenu.localPlayerIndex == 0) ? &p1sel : &p2sel;
                     NetRosterState beforeSend = PackRosterState(localSel);
-                    if (IsKeyPressed(KEY_A) && localSel->cursor > 0 && !localSel->confirmed) localSel->cursor--;
-                    if (IsKeyPressed(KEY_D) && localSel->cursor < CHAR_COUNT - 1 && !localSel->confirmed) localSel->cursor++;
+                    if (IsKeyPressed(KEY_A) && !localSel->confirmed) localSel->cursor = (localSel->cursor > 0) ? localSel->cursor - 1 : CHAR_COUNT - 1;
+                    if (IsKeyPressed(KEY_D) && !localSel->confirmed) localSel->cursor = (localSel->cursor < CHAR_COUNT - 1) ? localSel->cursor + 1 : 0;
                     if (IsKeyPressed(KEY_SPACE) && !localSel->confirmed) {
                         localSel->selected = (CharacterID)localSel->cursor;
                         localSel->confirmed = true;
@@ -3483,8 +3565,8 @@ int main(int argc, char** argv) {
                     float wheel = GetMouseWheelMove();
                     SelectState* focusSel = (frontend.charSelectFocus == 0) ? &p1sel : &p2sel;
                     if (IsKeyPressed(KEY_TAB) && p1sel.confirmed) frontend.charSelectFocus = 1 - frontend.charSelectFocus;
-                    if (IsKeyPressed(KEY_A) && focusSel->cursor > 0 && !focusSel->confirmed) focusSel->cursor--;
-                    if (IsKeyPressed(KEY_D) && focusSel->cursor < CHAR_COUNT - 1 && !focusSel->confirmed) focusSel->cursor++;
+                    if (IsKeyPressed(KEY_A) && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor > 0) ? focusSel->cursor - 1 : CHAR_COUNT - 1;
+                    if (IsKeyPressed(KEY_D) && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor < CHAR_COUNT - 1) ? focusSel->cursor + 1 : 0;
                     if (wheel < -0.1f && !focusSel->confirmed && focusSel->cursor < CHAR_COUNT - 1) focusSel->cursor++;
                     if (wheel > 0.1f && !focusSel->confirmed && focusSel->cursor > 0) focusSel->cursor--;
                     for (int i = 0; i < CHAR_COUNT; i++) {
@@ -3823,6 +3905,8 @@ int main(int argc, char** argv) {
     if (gRetroFontLoaded) UnloadFont(gRetroFont);
     if (gojoPortraitLoaded) UnloadTexture(gojoPortrait);
     UnloadGojoSpritePack();
+    UnloadSukunaSpritePack();
+    UnloadYujiSpritePack();
     for (int i = 0; i < menuVideo.count; i++) {
         if (IsTextureValid(menuVideo.frames[i])) UnloadTexture(menuVideo.frames[i]);
     }

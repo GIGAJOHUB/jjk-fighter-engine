@@ -1,0 +1,25 @@
+;++++++++++++++++++++++++++JOEY Jostar+++++++++++++++++++++++++++++++++++++++++++++
+
+
+[Info]
+name ="Sukuna"
+displayname ="Sukuna"
+versiondate =2021/1/31
+mugenversion = 1.0
+author ="JOEY JOSTAR, edit Ghost Carti"
+
+[Files]
+sprite =Yuji Itadori.sff
+anim =Yuji Itadori.air
+sound =Yuji Itadori.snd
+cmd =Yuji Itadori.cmd
+cns =Yuji Itadori.cns
+stcommon =common1.cns
+st =Yuji Itadori.cns
+st1=IA.cns
+st2=Especiales.cns
+st3=Sukuna.cns
+
+[Arcade]
+intro.storyboard = 
+ending.storyboard = 

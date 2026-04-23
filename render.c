@@ -1,7 +1,11 @@
 #include "render.h"
-#include "raymath.h"
 #define CHARACTER_GOJO_SPRITE_IMPLEMENTATION
 #include "character_gojo_sprite.h"
+#define CHARACTER_SUKUNA_SPRITE_IMPLEMENTATION
+#include "character_sukuna_sprite.h"
+#define CHARACTER_YUJI_SPRITE_IMPLEMENTATION
+#include "character_yuji_sprite.h"
+#include "raymath.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,12 +15,10 @@
 Particle gParticles[MAX_PARTICLES];
 ScreenShake gShake = {0};
 DomainAnnounce gDomainAnnounce = {0};
-FloatingText gFloatingTexts[16];
 static Font gUiFont = {0};
 static bool gUiFontLoaded = false;
 static Texture2D gGojoPortrait = {0};
 static bool gGojoPortraitLoaded = false;
-static int gRCTFlashFrames = 0;
 
 static Vector2 UiMeasure(const char* text, float fontSize, float spacing) {
     if (gUiFontLoaded) return MeasureTextEx(gUiFont, text, fontSize, spacing);
@@ -36,62 +38,6 @@ void SetUIFont(Font font, bool loaded) {
 void SetGojoPortrait(Texture2D portrait, bool loaded) {
     gGojoPortrait = portrait;
     gGojoPortraitLoaded = loaded;
-}
-
-void FloatingTextSpawn(Vector2 pos, const char* text, Color color, float life) {
-    for (int i = 0; i < 16; i++) {
-        if (!gFloatingTexts[i].active) {
-            gFloatingTexts[i].pos = pos;
-            snprintf(gFloatingTexts[i].text, sizeof(gFloatingTexts[i].text), "%s", text);
-            gFloatingTexts[i].color = color;
-            gFloatingTexts[i].life = life;
-            gFloatingTexts[i].maxLife = life;
-            gFloatingTexts[i].active = true;
-            return;
-        }
-    }
-}
-
-void FloatingTextUpdate(void) {
-    float dt = GetFrameTime();
-    for (int i = 0; i < 16; i++) {
-        if (!gFloatingTexts[i].active) continue;
-        gFloatingTexts[i].life -= dt;
-        gFloatingTexts[i].pos.y -= 20.0f * dt;
-        if (gFloatingTexts[i].life <= 0.0f) {
-            gFloatingTexts[i].active = false;
-        }
-    }
-}
-
-void FloatingTextDraw(void) {
-    for (int i = 0; i < 16; i++) {
-        if (!gFloatingTexts[i].active) continue;
-        float alpha = gFloatingTexts[i].life / gFloatingTexts[i].maxLife;
-        Color c = gFloatingTexts[i].color;
-        c.a = (unsigned char)(255.0f * alpha);
-        Vector2 size = UiMeasure(gFloatingTexts[i].text, 14.0f, 1.0f);
-        UiText(gFloatingTexts[i].text, (Vector2){ gFloatingTexts[i].pos.x - size.x * 0.5f, gFloatingTexts[i].pos.y }, 14.0f, 1.0f, c);
-    }
-}
-
-void TriggerRCTFlash(void) {
-    gRCTFlashFrames = 4;
-}
-
-void DrawRCTFlashOverlay(int screenW, int screenH) {
-    if (gRCTFlashFrames > 0) {
-        DrawRectangle(0, 0, screenW, screenH, ColorAlpha(WHITE, 0.18f));
-    }
-}
-
-void SpawnRCTBurst(Vector2 center) {
-    for (int i = 0; i < 20; i++) {
-        float angle = (float)(i % 4) * PI * 0.5f;
-        float lane = 0.65f + (float)(i / 4) * 0.12f;
-        Vector2 vel = { cosf(angle) * 1.4f * lane, -fabsf(sinf(angle)) * 1.8f * lane - 0.2f };
-        ParticleSpawn(center, vel, (Color){80, 255, 120, 255}, 0.55f, 5.0f, PARTICLE_REGEN);
-    }
 }
 
 static Color Lighten(Color c, int amount) {
@@ -132,7 +78,6 @@ void ParticleSpawnBurst(Vector2 pos, int count, Color col, float speed, float li
 
 void ParticleUpdate(void) {
     float dt = GetFrameTime();
-    if (gRCTFlashFrames > 0) gRCTFlashFrames--;
     for (int i = 0; i < MAX_PARTICLES; i++) {
         if (!gParticles[i].active) continue;
         gParticles[i].pos.x += gParticles[i].vel.x;
@@ -280,7 +225,6 @@ static void DrawStars(int screenW, int screenH, Color color, float speed) {
 }
 
 static void DrawSukunaDomain(float timer, int screenW, int screenH) {
-    (void)timer;
     float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 3.0f);
     ClearBackground((Color){18, 0, 0, 255});
     DrawRectangleGradientV(0, 0, screenW, screenH, (Color){10, 0, 0, 255}, (Color){65, 0, 0, 255});
@@ -448,25 +392,34 @@ void DrawFighterBody(Fighter* f, bool isP1, float introProgress, bool domainCast
         DrawCircleLines((int)(bx + bw * 0.5f), (int)(by + bh * 0.45f), 46.0f * repel, ColorAlpha((Color){120, 200, 255, 255}, 0.45f));
     }
 
-    if (!DrawGojoSprite(f, isP1, introProgress, domainCast, domainCounter)) {
+    bool spriteRendered = DrawGojoSprite(f, isP1, introProgress, domainCast, domainCounter);
+    if (!spriteRendered) {
+        spriteRendered = DrawSukunaSprite(f, isP1, introProgress, domainCast, domainCounter);
+    }
+    if (!spriteRendered) {
+        spriteRendered = DrawYujiSprite(f, isP1, introProgress, domainCast, domainCounter);
+    }
+    if (!spriteRendered) {
         DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, f->bodyColor);
         DrawRectangleRounded((Rectangle){ bx + 5.0f, by + 5.0f, bw - 10.0f, bh * 0.38f }, 0.15f, 8, Lighten(f->bodyColor, 45));
         DrawRectangleRoundedLines((Rectangle){ bx, by, bw, bh }, 0.15f, 8, Lighten(f->bodyColor, 85));
     }
 
-    if (f->isBlocking) {
+    if (f->isBlocking && !spriteRendered) {
         DrawRectangleRounded((Rectangle){ bx, by, bw, bh }, 0.15f, 8, ColorAlpha(LIGHTGRAY, 0.45f));
     }
 
-    float eyeX = (f->facingDir > 0) ? bx + bw - 16.0f : bx + 16.0f;
-    DrawCircle((int)eyeX, (int)(by + 18.0f), 7, WHITE);
-    DrawCircle((int)(eyeX + f->facingDir * 2), (int)(by + 18.0f), 3, BLACK);
+    if (!spriteRendered) {
+        float eyeX = (f->facingDir > 0) ? bx + bw - 16.0f : bx + 16.0f;
+        DrawCircle((int)eyeX, (int)(by + 18.0f), 7, WHITE);
+        DrawCircle((int)(eyeX + f->facingDir * 2), (int)(by + 18.0f), 3, BLACK);
 
-    if (f->charData.traits.hasSixEyes) {
-        DrawCircle((int)eyeX, (int)(by + 18.0f), 11, ColorAlpha((Color){100, 210, 255, 255}, 0.45f + 0.2f * sinf((float)GetTime() * 5.0f)));
+        if (f->charData.traits.hasSixEyes) {
+            DrawCircle((int)eyeX, (int)(by + 18.0f), 11, ColorAlpha((Color){100, 210, 255, 255}, 0.45f + 0.2f * sinf((float)GetTime() * 5.0f)));
+        }
     }
 
-    if (f->isAttacking) {
+    if (f->isAttacking && !spriteRendered) {
         Rectangle slash = {
             bx + (f->facingDir > 0 ? bw - 4.0f : -66.0f),
             by + 20.0f, 68.0f, 40.0f
@@ -567,35 +520,35 @@ void DrawProjectiles(const Projectile* projectiles, int count) {
 static const char* AbilityRowText(const Fighter* f, bool isP1) {
     switch (f->charData.id) {
         case CHAR_GOJO:
-            return isP1 ? "[LMB] Hit | [1] Tool | [E] Blue | [F] Red | [G] Infinity | [H] Domain | [X] Purple"
-                        : "[N0] Hit | [N1] Tool | [N4] Blue | [N5] Red | [N6] Infinity | [N3] Domain | [N7] Purple";
+            return isP1 ? "[E] Blue | [R] Red | [F] Infinity | [X] Purple"
+                        : "[N4] Blue | [N5] Red | [N6] Infinity | [N7] Purple";
         case CHAR_SUKUNA:
-            return isP1 ? "[LMB] Hit | [1] Tool | [E] Dismantle | [F] Cleave | [H] Domain | [X] Fuga"
-                        : "[N0] Hit | [N1] Tool | [N4] Dismantle | [N5] Cleave | [N3] Domain | [N7] Fuga";
+            return isP1 ? "[E] Dismantle | [R] Cleave | [X] Fuga"
+                        : "[N4] Dismantle | [N5] Cleave | [N7] Fuga";
         case CHAR_YUTA:
-            return isP1 ? "[LMB] Hit | [1] Tool | [E] Katana | [F] Rika | [H] Domain | [X] Love Beam"
-                        : "[N0] Hit | [N1] Tool | [N4] Katana | [N5] Rika | [N3] Domain | [N7] Love Beam";
+            return isP1 ? "[E] Katana | [R] Rika | [X] Love Beam"
+                        : "[N4] Katana | [N5] Rika | [N7] Love Beam";
         case CHAR_MEGUMI:
-            return isP1 ? "[LMB] Hit | [1] Tool | [E] Nue | [F] Dogs | [G] Shadow | [H] Domain | [X] Mahoraga"
-                        : "[N0] Hit | [N1] Tool | [N4] Nue | [N5] Dogs | [N6] Shadow | [N3] Domain | [N7] Mahoraga";
+            return isP1 ? "[E] Nue | [R] Dogs | [F] Domain | [X] Mahoraga"
+                        : "[N4] Nue | [N5] Dogs | [N6] Domain | [N7] Mahoraga";
         case CHAR_NANAMI:
-            return isP1 ? "[LMB] Hit | [E] Ratio | [F] Collapse | [G] Overtime | [X] Slash"
-                        : "[N0] Hit | [N4] Ratio | [N5] Collapse | [N6] Overtime | [N7] Slash";
+            return isP1 ? "[E] Ratio | [R] Collapse | [F] Overtime | [X] Slash"
+                        : "[N4] Ratio | [N5] Collapse | [N6] Overtime | [N7] Slash";
         case CHAR_NOBARA:
-            return isP1 ? "[LMB] Hit | [E] Nail | [F] Resonance | [G] Hairpin | [X] Maximum"
-                        : "[N0] Hit | [N4] Nail | [N5] Resonance | [N6] Hairpin | [N7] Maximum";
+            return isP1 ? "[E] Nail | [R] Resonance | [F] Hairpin | [X] Maximum"
+                        : "[N4] Nail | [N5] Resonance | [N6] Hairpin | [N7] Maximum";
         case CHAR_TODO:
-            return isP1 ? "[LMB] Hit | [E] Strike | [F] Swap | [G] Clap | [X] Tackle"
-                        : "[N0] Hit | [N4] Strike | [N5] Swap | [N6] Clap | [N7] Tackle";
+            return isP1 ? "[E] Strike | [R] Swap | [F] Clap | [X] Tackle"
+                        : "[N4] Strike | [N5] Swap | [N6] Clap | [N7] Tackle";
         case CHAR_YUJI:
-            return isP1 ? "[LMB] Hit | [Q] Dash | [RMB] Parry | [X] Black Flash"
-                        : "[N0] Hit | [NUM.] Parry | [N8] Dash | [N7] Black Flash";
+            return isP1 ? "[1] Hit | [Q] Dash | [X] Black Flash"
+                        : "[N1] Hit | [N0] Dash | [N7] Black Flash";
         case CHAR_TOJI:
-            return isP1 ? "[LMB] Hit | [Q] Dash | [X] Assault"
-                        : "[N0] Hit | [N8] Dash | [N7] Assault";
+            return isP1 ? "[1] Hit | [Q] Dash | [X] Assault"
+                        : "[N1] Hit | [N0] Dash | [N7] Assault";
         default:
-            return isP1 ? "[LMB] Hit | [1] Tool | [R] RCT | [H] Domain | [X] Ult"
-                        : "[N0] Hit | [N1] Tool | [N2] RCT | [N3] Domain | [N7] Ult";
+            return isP1 ? "[1] Attack | [2] Heal | [3] Domain | [X] Ult"
+                        : "[N1] Attack | [N2] Heal | [N3] Domain | [N7] Ult";
     }
 }
 
@@ -641,50 +594,6 @@ static void DrawPremiumBar(float val, float maxVal, int x, int y, int w, int h,
     DrawRectangleLines(drawX, y, w, h, (Color){225, 225, 235, 180});
 }
 
-static float CooldownFill(float remaining, float maxCooldown) {
-    if (maxCooldown <= 0.0f) return 1.0f;
-    float fill = 1.0f - (remaining / maxCooldown);
-    if (fill < 0.0f) fill = 0.0f;
-    if (fill > 1.0f) fill = 1.0f;
-    return fill;
-}
-
-static void DrawCooldownBar(int x, int y, const char* label, float remaining, float maxCooldown, Color color, bool alignRight) {
-    int w = 64;
-    int h = 6;
-    int drawX = alignRight ? x - w : x;
-    float fill = CooldownFill(remaining, maxCooldown);
-    DrawRectangle(drawX, y, w, h, (Color){42, 42, 52, 215});
-    DrawRectangle(drawX, y, (int)(w * fill), h, color);
-    DrawRectangleLines(drawX, y, w, h, ColorAlpha(WHITE, 0.4f));
-    if (alignRight) {
-        int lw = (int)UiMeasure(label, 8.0f, 1.0f).x;
-        UiText(label, (Vector2){ (float)(drawX + w - lw), (float)(y - 11) }, 8.0f, 1.0f, WHITE);
-    } else {
-        UiText(label, (Vector2){ (float)drawX, (float)(y - 11) }, 8.0f, 1.0f, WHITE);
-    }
-}
-
-static void DrawCooldownHudRow(const Fighter* f, int anchorX, int y, bool alignRight) {
-    int step = 70;
-    int startX = anchorX;
-    if (alignRight) startX = anchorX;
-    DrawCooldownBar(startX + (alignRight ? 0 : 0) * step, y, "[LMB]", 0.0f, 1.0f, WHITE, alignRight);
-    DrawCooldownBar(startX + (alignRight ? -1 : 1) * step, y, "[RMB]", f->isBlocking ? 0.2f : 0.0f, 0.2f, LIGHTGRAY, alignRight);
-    DrawCooldownBar(startX + (alignRight ? -2 : 2) * step, y, "[1]", f->ceAttackCooldown, 1.2f, f->charData.ceColor, alignRight);
-    DrawCooldownBar(startX + (alignRight ? -3 : 3) * step, y, "[E]", f->abilityECooldown, 5.0f, SKYBLUE, alignRight);
-    DrawCooldownBar(startX + (alignRight ? -4 : 4) * step, y, "[F]", f->abilityRCooldown, 5.0f, ORANGE, alignRight);
-    DrawCooldownBar(startX + (alignRight ? -5 : 5) * step, y, "[G/H]", f->abilityFCooldown, 4.0f, PURPLE, alignRight);
-    {
-        int ultX = startX + (alignRight ? -6 : 6) * step;
-        int boxX = alignRight ? ultX - 64 : ultX;
-        DrawRectangle(boxX, y, 64, 6, (Color){42, 42, 52, 215});
-        DrawRectangle(boxX, y, f->ultUsed ? 0 : 64, 6, GOLD);
-        DrawRectangleLines(boxX, y, 64, 6, ColorAlpha(WHITE, 0.4f));
-        UiText("[X]", (Vector2){ (float)boxX, (float)(y - 11) }, 8.0f, 1.0f, WHITE);
-    }
-}
-
 static void DrawGhostBar(float ghostVal, float val, float maxVal, int x, int y, int w, int h, bool alignRight) {
     int drawX = alignRight ? x - w : x;
     int ghostFilled = (int)((ghostVal / maxVal) * w);
@@ -714,50 +623,171 @@ static void DrawTraitLine(Fighter* f, int x, int y, bool alignRight) {
     UiText(line, (Vector2){ (float)(alignRight ? x - w : x), (float)y }, 10.0f, 1.0f, ColorAlpha(WHITE, 0.8f));
 }
 
+FloatingText gFloatingTexts[16] = {0};
+
+void FloatingTextSpawn(Vector2 pos, const char* text, Color color, float life) {
+    for (int i = 0; i < 16; i++) {
+        if (!gFloatingTexts[i].active) {
+            gFloatingTexts[i].pos = pos;
+            snprintf(gFloatingTexts[i].text, sizeof(gFloatingTexts[i].text), "%s", text);
+            gFloatingTexts[i].color = color;
+            gFloatingTexts[i].life = life;
+            gFloatingTexts[i].maxLife = life;
+            gFloatingTexts[i].active = true;
+            return;
+        }
+    }
+}
+
+void FloatingTextUpdate(void) {
+    float dt = GetFrameTime();
+    for (int i = 0; i < 16; i++) {
+        if (!gFloatingTexts[i].active) continue;
+        gFloatingTexts[i].life -= dt;
+        gFloatingTexts[i].pos.y -= 30.0f * dt;
+        if (gFloatingTexts[i].life <= 0.0f) gFloatingTexts[i].active = false;
+    }
+}
+
+void FloatingTextDraw(void) {
+    for (int i = 0; i < 16; i++) {
+        if (!gFloatingTexts[i].active) continue;
+        float alpha = gFloatingTexts[i].life / gFloatingTexts[i].maxLife;
+        Color c = gFloatingTexts[i].color;
+        c.a = (unsigned char)(alpha * 255.0f);
+        int tw = (int)UiMeasure(gFloatingTexts[i].text, 14.0f, 1.0f).x;
+        UiText(gFloatingTexts[i].text, (Vector2){ gFloatingTexts[i].pos.x - tw * 0.5f, gFloatingTexts[i].pos.y }, 14.0f, 1.0f, c);
+    }
+}
+
+static float gRCTFlashTimer = 0.0f;
+
+void TriggerRCTFlash(void) {
+    gRCTFlashTimer = 0.3f;
+}
+
+void DrawRCTFlashOverlay(int screenW, int screenH) {
+    if (gRCTFlashTimer > 0.0f) {
+        float alpha = gRCTFlashTimer / 0.3f;
+        DrawRectangle(0, 0, screenW, screenH, ColorAlpha((Color){80, 255, 120, 255}, alpha * 0.12f));
+        gRCTFlashTimer -= GetFrameTime();
+        if (gRCTFlashTimer < 0.0f) gRCTFlashTimer = 0.0f;
+    }
+}
+
+void SpawnRCTBurst(Vector2 center) {
+    ParticleSpawnBurst(center, 16, (Color){80, 255, 120, 255}, 4.0f, 0.5f, 4.0f, PARTICLE_REGEN);
+}
+
+
+static void GetAbilityNames(CharacterID id, const char** a1, const char** a2, const char** a3) {
+    switch (id) {
+        case CHAR_GOJO:   *a1 = "BLUE";      *a2 = "RED";        *a3 = "INFINITY";  break;
+        case CHAR_SUKUNA: *a1 = "DISMANTLE";  *a2 = "CLEAVE";    *a3 = "FLAME";     break;
+        case CHAR_YUTA:   *a1 = "KATANA";     *a2 = "RIKA";      *a3 = "COPY";      break;
+        case CHAR_YUJI:   *a1 = "BF FLOW";    *a2 = "DIVERGE";   *a3 = "PIVOT";     break;
+        case CHAR_TOJI:   *a1 = "ASSAULT";    *a2 = "WEAPON";    *a3 = "INSTINCT";  break;
+        case CHAR_MEGUMI: *a1 = "NUE";        *a2 = "DOGS";      *a3 = "SHADOW";    break;
+        case CHAR_NANAMI: *a1 = "RATIO";      *a2 = "COLLAPSE";  *a3 = "OVERTIME";  break;
+        case CHAR_NOBARA: *a1 = "NAIL";       *a2 = "RESONANCE"; *a3 = "HAIRPIN";   break;
+        case CHAR_TODO:   *a1 = "STRIKE";     *a2 = "BOOGIE";    *a3 = "CLAP";      break;
+        default:          *a1 = "SKILL1";     *a2 = "SKILL2";    *a3 = "SKILL3";    break;
+    }
+}
+
+static void DrawAbilitySlots(const Fighter* f, int x, int y, bool alignRight) {
+    const char *a1, *a2, *a3;
+    GetAbilityNames(f->charData.id, &a1, &a2, &a3);
+    Color keyColor = (Color){255, 214, 118, 230};
+    Color nameColor = (Color){210, 215, 230, 210};
+    Color cdColor = (Color){160, 160, 170, 140};
+    char buf[48];
+    int totalW = 0;
+    const char* labels[3]; labels[0] = a1; labels[1] = a2; labels[2] = a3;
+    float cooldowns[3] = { f->abilityECooldown, f->abilityRCooldown, f->abilityFCooldown };
+    for (int i = 0; i < 3; i++) {
+        snprintf(buf, sizeof(buf), "[%d] %s  ", i + 1, labels[i]);
+        totalW += (int)UiMeasure(buf, 10.0f, 1.0f).x;
+    }
+    int drawX = alignRight ? x - totalW : x;
+    for (int i = 0; i < 3; i++) {
+        bool onCd = cooldowns[i] > 0.0f;
+        snprintf(buf, sizeof(buf), "[%d]", i + 1);
+        UiText(buf, (Vector2){ (float)drawX, (float)y }, 10.0f, 1.0f, keyColor);
+        drawX += (int)UiMeasure(buf, 10.0f, 1.0f).x + 2;
+        snprintf(buf, sizeof(buf), "%s  ", labels[i]);
+        UiText(buf, (Vector2){ (float)drawX, (float)y }, 10.0f, 1.0f, onCd ? cdColor : nameColor);
+        drawX += (int)UiMeasure(buf, 10.0f, 1.0f).x;
+    }
+}
 void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int screenW,
              float roundTimer, int p1Rounds, int p2Rounds,
              const char* bannerText, const char* subText, float bannerTimer) {
     int screenH = GetScreenHeight();
     int leftX = 24;
     int rightX = screenW - 24;
-    int barW = 330;
+    int barW = 280;
     int hpY = 18;
-    int ceY = 46;
+    int ceY = 42;
 
-    DrawRectangle(0, 0, screenW, 96, ColorAlpha(BLACK, 0.36f));
-    DrawRectangleGradientV(0, 0, screenW, 96, ColorAlpha((Color){20, 14, 26, 255}, 0.9f), ColorAlpha(BLACK, 0.0f));
+    DrawRectangle(0, 0, screenW, 72, ColorAlpha(BLACK, 0.36f));
+    DrawRectangleGradientV(0, 0, screenW, 72, ColorAlpha((Color){20, 14, 26, 255}, 0.9f), ColorAlpha(BLACK, 0.0f));
 
-    DrawPremiumBar(p1->hp, p1->maxHP, leftX + 56, hpY, barW, 22, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, false);
-    DrawGhostBar(p1->ghostHP, p1->hp, p1->maxHP, leftX + 56, hpY, barW, 22, false);
-    DrawPremiumBar(p1->cursedEnergy, p1->maxCE, leftX + 56, ceY, barW, 10, p1->charData.ceColor, (Color){18, 16, 28, 220}, false);
+    DrawPremiumBar(p1->hp, p1->maxHP, leftX + 42, hpY, barW, 18, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, false);
+    DrawGhostBar(p1->ghostHP, p1->hp, p1->maxHP, leftX + 42, hpY, barW, 18, false);
+    DrawPremiumBar(p1->cursedEnergy, p1->maxCE, leftX + 42, ceY, barW, 8, p1->charData.ceColor, (Color){18, 16, 28, 220}, false);
     if (p1->rctGlowTimer > 0.0f) {
         float pulse = 0.25f + 0.35f * (0.5f + 0.5f * sinf((float)GetTime() * 12.0f));
-        DrawRectangleLinesEx((Rectangle){ leftX + 54.0f, hpY - 2.0f, barW + 4.0f, 26.0f }, 2.0f, ColorAlpha((Color){80, 255, 120, 255}, pulse));
+        DrawRectangleLinesEx((Rectangle){ leftX + 40.0f, hpY - 2.0f, barW + 4.0f, 22.0f }, 2.0f, ColorAlpha((Color){80, 255, 120, 255}, pulse));
     }
-    DrawRectangle(leftX, hpY - 2, 44, 44, ColorAlpha(p1->charData.bodyColor, 0.9f));
-    DrawRectangleLines(leftX, hpY - 2, 44, 44, WHITE);
-    UiText(p1->charData.name, (Vector2){ (float)(leftX + 56), 66.0f }, 16.0f, 1.0f, WHITE);
-    DrawRoundIcons(leftX + 64, 88, p1Rounds, false);
+    DrawRectangle(leftX, hpY - 2, 36, 36, ColorAlpha(p1->charData.bodyColor, 0.9f));
+    DrawRectangleLines(leftX, hpY - 2, 36, 36, WHITE);
+    UiText(p1->charData.name, (Vector2){ (float)(leftX + 42), 55.0f }, 12.0f, 1.0f, WHITE);
+    DrawRoundIcons(leftX + 50, 68, p1Rounds, false);
 
-    DrawPremiumBar(p2->hp, p2->maxHP, rightX - 56, hpY, barW, 22, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, true);
-    DrawGhostBar(p2->ghostHP, p2->hp, p2->maxHP, rightX - 56, hpY, barW, 22, true);
-    DrawPremiumBar(p2->cursedEnergy, p2->maxCE, rightX - 56, ceY, barW, 10, p2->charData.ceColor, (Color){18, 16, 28, 220}, true);
+    DrawPremiumBar(p2->hp, p2->maxHP, rightX - 42, hpY, barW, 18, (Color){210, 56, 80, 255}, (Color){36, 20, 26, 220}, true);
+    DrawGhostBar(p2->ghostHP, p2->hp, p2->maxHP, rightX - 42, hpY, barW, 18, true);
+    DrawPremiumBar(p2->cursedEnergy, p2->maxCE, rightX - 42, ceY, barW, 8, p2->charData.ceColor, (Color){18, 16, 28, 220}, true);
     if (p2->rctGlowTimer > 0.0f) {
         float pulse = 0.25f + 0.35f * (0.5f + 0.5f * sinf((float)GetTime() * 12.0f));
-        DrawRectangleLinesEx((Rectangle){ rightX - 56.0f - barW - 2.0f, hpY - 2.0f, barW + 4.0f, 26.0f }, 2.0f, ColorAlpha((Color){80, 255, 120, 255}, pulse));
+        DrawRectangleLinesEx((Rectangle){ rightX - 42.0f - barW - 2.0f, hpY - 2.0f, barW + 4.0f, 22.0f }, 2.0f, ColorAlpha((Color){80, 255, 120, 255}, pulse));
     }
-    DrawRectangle(rightX - 44, hpY - 2, 44, 44, ColorAlpha(p2->charData.bodyColor, 0.9f));
-    DrawRectangleLines(rightX - 44, hpY - 2, 44, 44, WHITE);
+    DrawRectangle(rightX - 36, hpY - 2, 36, 36, ColorAlpha(p2->charData.bodyColor, 0.9f));
+    DrawRectangleLines(rightX - 36, hpY - 2, 36, 36, WHITE);
     {
-        int nameW = (int)UiMeasure(p2->charData.name, 16.0f, 1.0f).x;
-        UiText(p2->charData.name, (Vector2){ (float)(rightX - 56 - nameW), 66.0f }, 16.0f, 1.0f, WHITE);
+        int nameW = (int)UiMeasure(p2->charData.name, 12.0f, 1.0f).x;
+        UiText(p2->charData.name, (Vector2){ (float)(rightX - 42 - nameW), 55.0f }, 12.0f, 1.0f, WHITE);
     }
-    DrawRoundIcons(rightX - 64, 88, p2Rounds, true);
+    DrawRoundIcons(rightX - 50, 68, p2Rounds, true);
 
-    DrawTraitLine(p1, leftX + 56, 82, false);
-    DrawTraitLine(p2, rightX - 56, 82, true);
-    DrawSpecialStatus(p1, leftX + 56, 94, false);
-    DrawSpecialStatus(p2, rightX - 56, 94, true);
+    DrawSpecialStatus(p1, leftX + 42, 72, false);
+    DrawSpecialStatus(p2, rightX - 42, 72, true);
+
+    DrawAbilitySlots(p1, leftX + 42, 84, false);
+    DrawAbilitySlots(p2, rightX - 42, 84, true);
+
+    /* Guard meter (small bar under CE) */
+    {
+        int guardY = 52;
+        int guardH = 4;
+        float g1 = (p1->guardMax > 0.0f) ? (p1->guardMeter / p1->guardMax) : 1.0f;
+        float g2 = (p2->guardMax > 0.0f) ? (p2->guardMeter / p2->guardMax) : 1.0f;
+        Color guardColor = (Color){240, 200, 60, 200};
+        Color guardBg = (Color){40, 35, 50, 180};
+        DrawRectangle(leftX + 42, guardY, barW, guardH, guardBg);
+        DrawRectangle(leftX + 42, guardY, (int)(barW * g1), guardH, g1 < 0.3f ? (Color){255, 80, 60, 230} : guardColor);
+        DrawRectangle(rightX - 42 - barW, guardY, barW, guardH, guardBg);
+        DrawRectangle(rightX - 42 - barW + (int)(barW * (1.0f - g2)), guardY, (int)(barW * g2), guardH, g2 < 0.3f ? (Color){255, 80, 60, 230} : guardColor);
+    }
+
+    /* Dizzy indicator */
+    if (p1->isDizzy) {
+        UiText("DIZZY!", (Vector2){ leftX + 42.0f, 95.0f }, 12.0f, 1.0f, (Color){255, 230, 80, (unsigned char)(180 + 70 * sinf((float)GetTime() * 10.0f))});
+    }
+    if (p2->isDizzy) {
+        int dw = (int)UiMeasure("DIZZY!", 12.0f, 1.0f).x;
+        UiText("DIZZY!", (Vector2){ (float)(rightX - 42 - dw), 95.0f }, 12.0f, 1.0f, (Color){255, 230, 80, (unsigned char)(180 + 70 * sinf((float)GetTime() * 10.0f))});
+    }
 
     {
         char timerText[32];
@@ -776,15 +806,7 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
         }
     }
 
-    UiText(AbilityRowText(p1, true), (Vector2){ 24.0f, 102.0f }, 13.0f, 1.0f, (Color){235, 238, 245, 235});
-    {
-        const char* p2Abilities = AbilityRowText(p2, false);
-        int aw = (int)UiMeasure(p2Abilities, 12.0f, 1.0f).x;
-        UiText(p2Abilities, (Vector2){ (float)(screenW - 24 - aw), 102.0f }, 13.0f, 1.0f, (Color){235, 238, 245, 235});
-    }
-    DrawCooldownHudRow(p1, 42, 148, false);
-    DrawCooldownHudRow(p2, screenW - 42, 148, true);
-
+    /* Ability text and cooldown bars removed for cleaner HUD */
     if (p1->mahoragaActive && p1->mahoragaHP > 0.0f) {
         UiText("MAHORAGA", (Vector2){ screenW * 0.5f - 152.0f, 86.0f }, 12.0f, 1.0f, (Color){240, 240, 255, 255});
         DrawPremiumBar(p1->mahoragaHP, p1->mahoragaMaxHP, screenW * 0.5f - 60, 84, 120, 10, (Color){230, 230, 245, 255}, (Color){32, 30, 46, 220}, false);
@@ -799,26 +821,32 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
 
     if (p1->comboDisplayTimer > 0.0f && p1->comboCounter >= 2) {
         char combo[32];
-        snprintf(combo, sizeof(combo), "%d HIT COMBO", p1->comboCounter);
-        UiText(combo, (Vector2){ screenW * 0.5f + 36.0f, 188.0f }, 36.0f, 1.0f, p1->charData.ceColor);
+        snprintf(combo, sizeof(combo), "%d HIT!", p1->comboCounter);
+        UiText(combo, (Vector2){ screenW * 0.5f + 80.0f, 150.0f }, 18.0f, 1.0f, (Color){255, 220, 140, 255});
     } else if (p2->comboDisplayTimer > 0.0f && p2->comboCounter >= 2) {
         char combo[32];
-        snprintf(combo, sizeof(combo), "%d HIT COMBO", p2->comboCounter);
-        UiText(combo, (Vector2){ screenW * 0.5f - 250.0f, 188.0f }, 36.0f, 1.0f, p2->charData.ceColor);
-    }
-    if (domainActive && !p1->hasDomain && !p1->isHeavenlyRestricted) {
-        UiText("SURVIVE!", (Vector2){ screenW * 0.5f - 82.0f, 214.0f }, 24.0f, 1.0f, (Color){255, 80, 80, 240});
-    } else if (domainActive && !p2->hasDomain && !p2->isHeavenlyRestricted) {
-        UiText("SURVIVE!", (Vector2){ screenW * 0.5f - 82.0f, 214.0f }, 24.0f, 1.0f, (Color){255, 80, 80, 240});
+        snprintf(combo, sizeof(combo), "%d HIT!", p2->comboCounter);
+        UiText(combo, (Vector2){ screenW * 0.5f - 150.0f, 150.0f }, 18.0f, 1.0f, (Color){255, 220, 140, 255});
     }
 
     if (bannerTimer > 0.0f) {
-        int bw = (int)UiMeasure(bannerText, 34.0f, 1.0f).x;
-        DrawRectangle(0, screenH / 2 - 52, screenW, 104, ColorAlpha(BLACK, 0.5f));
-        UiText(bannerText, (Vector2){ (float)(screenW / 2 - bw * 0.5f), (float)(screenH / 2 - 26) }, 34.0f, 1.0f, (Color){255, 225, 140, 255});
+        float alpha = bannerTimer > 0.3f ? 1.0f : (bannerTimer / 0.3f);
+        float scale = 1.0f;
+        if (strcmp(bannerText, "FIGHT!") == 0) {
+            scale = 1.0f + (1.0f - bannerTimer); // expands
+        } else {
+            scale = 1.0f + 0.05f * sinf(bannerTimer * 8.0f); // slight pulse
+        }
+
+        int bw = (int)UiMeasure(bannerText, 44.0f * scale, 1.0f).x;
+        DrawRectangle(0, screenH / 2 - 60, screenW, 120, ColorAlpha((Color){10, 5, 20, 255}, 0.75f * alpha));
+        DrawRectangle(0, screenH / 2 - 60, screenW, 4, ColorAlpha((Color){255, 214, 118, 255}, alpha));
+        DrawRectangle(0, screenH / 2 + 56, screenW, 4, ColorAlpha((Color){255, 214, 118, 255}, alpha));
+        
+        UiText(bannerText, (Vector2){ (float)(screenW / 2 - bw * 0.5f), (float)(screenH / 2 - 28 * scale) }, 44.0f * scale, 1.0f, ColorAlpha((Color){255, 225, 140, 255}, alpha));
         if (subText != NULL && subText[0] != '\0') {
-            int sw = (int)UiMeasure(subText, 16.0f, 1.0f).x;
-            UiText(subText, (Vector2){ (float)(screenW / 2 - sw * 0.5f), (float)(screenH / 2 + 14) }, 16.0f, 1.0f, WHITE);
+            int sw = (int)UiMeasure(subText, 18.0f, 1.0f).x;
+            UiText(subText, (Vector2){ (float)(screenW / 2 - sw * 0.5f), (float)(screenH / 2 + 20) }, 18.0f, 1.0f, ColorAlpha(WHITE, alpha));
         }
     }
 }
@@ -837,14 +865,12 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     int slotH = 296;
     int gap = 24;
     float stripW = (float)(CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap);
-    float focus = cpuMode ? (float)(focusIndex == 0 ? p1Cursor : p2Cursor)
-                          : (((float)p1Cursor + (float)p2Cursor) * 0.5f);
+    float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
     float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
     float offset = targetCenter - screenW * 0.5f;
-    float visibleW = (float)screenW - 120.0f;
-    float maxOffset = stripW - visibleW;
+    float maxOffset = stripW - ((float)screenW - 120.0f);
     if (maxOffset < 0.0f) maxOffset = 0.0f;
-    offset = Clamp(offset, 0.0f, maxOffset);
+    offset = Clamp(offset, -80.0f, maxOffset);
     smoothedOffset += (offset - smoothedOffset) * 0.16f;
     float startX = 60.0f - smoothedOffset;
 

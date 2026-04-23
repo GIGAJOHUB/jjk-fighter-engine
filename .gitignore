@@ -71,3 +71,6 @@ player_profile.txt
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+*.sff
+*.snd

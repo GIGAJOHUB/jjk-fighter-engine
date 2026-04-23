@@ -164,6 +164,17 @@ typedef struct Fighter {
 
     Color           bodyColor;
     const char*     name;
+
+    /* SF2-style guard meter */
+    float           guardMeter;
+    float           guardMax;
+    int             guardBreakStun;
+
+    /* Dizzy/stun system */
+    float           dizzyMeter;
+    float           dizzyMax;
+    bool            isDizzy;
+    int             dizzyFrames;
 } Fighter;
 
 #endif // FIGHTER_H
