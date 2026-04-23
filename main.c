@@ -28,6 +28,14 @@
 #define ROUND_INTRO_TIME         1.8f
 #define ROUND_END_TIME           2.2f
 #define HITSTOP_HEAVY            4
+static float gTargetMusicVol = 0.6f;
+static float gCurrentMusicVol = 0.0f;
+static Sound gSfxRound1;
+static Sound gSfxRound2;
+static Sound gSfxRound3;
+static Sound gSfxFight;
+static bool gRoundsLoaded = false;
+
 #define HITSTOP_LIGHT            2
 #define DODGE_INVUL_FRAMES       8
 #define ATTACK_ACTIVE_START      4
@@ -2540,14 +2548,27 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     p1->prevX = p1->hitbox.x;
     p2->prevX = p2->hitbox.x;
 
-    /* 3-2-1 countdown then FIGHT! */
+    /* 3-second ROUND text then FIGHT! with SFX */
     if (!round->countdownDone) {
+        if (round->countdownTimer == 3.0f) {
+            /* Play Round X sound right at the start */
+            if (round->roundNumber == 1) PlaySound(gSfxRound1);
+            else if (round->roundNumber == 2) PlaySound(gSfxRound2);
+            else PlaySound(gSfxRound3);
+            round->countdownTimer -= 0.001f; /* slightly nudge so it doesn't trigger again */
+        }
+
         if (round->countdownTimer > 0.0f) {
             round->countdownTimer -= GetFrameTime();
             if (round->countdownTimer < 0.0f) round->countdownTimer = 0.0f;
-            int cnt = (int)ceilf(round->countdownTimer);
-            snprintf(round->bannerText, sizeof(round->bannerText), "%d", cnt > 0 ? cnt : 1);
+            
+            /* Text stays as ROUND X */
+            snprintf(round->bannerText, sizeof(round->bannerText), "ROUND %d", round->roundNumber);
             round->subText[0] = '\0';
+            
+            if (round->countdownTimer == 0.0f) {
+                PlaySound(gSfxFight);
+            }
         } else if (round->fightBannerTimer < 2.0f) {
             round->fightBannerTimer += GetFrameTime();
             snprintf(round->bannerText, sizeof(round->bannerText), "FIGHT!");
@@ -3048,6 +3069,13 @@ int main(int argc, char** argv) {
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
     InitAudioDevice();
+    if (!gRoundsLoaded) {
+        gSfxRound1 = LoadSound("assets/sounds/round1.ogg");
+        gSfxRound2 = LoadSound("assets/sounds/round2.ogg");
+        gSfxRound3 = LoadSound("assets/sounds/round3.ogg");
+        gSfxFight  = LoadSound("assets/sounds/fight.ogg");
+        gRoundsLoaded = true;
+    }
     SetDefaultControls();
     NetInit();
     LoadRelayConfig();
@@ -3165,7 +3193,9 @@ int main(int argc, char** argv) {
               if (rndB == 0) bgm = LoadMusicStream("assets/music/track2.mp3");
               else if (rndB == 1) bgm = LoadMusicStream("assets/music/track3.mp3");
               else bgm = LoadMusicStream("assets/menu_theme.mp3"); }
-            SetMusicVolume(bgm, 0.60f);
+            gTargetMusicVol = 0.6f;
+            gCurrentMusicVol = 0.0f;
+            SetMusicVolume(bgm, gCurrentMusicVol);
             PlayMusicStream(bgm);
             musicLoaded = true;
         }
@@ -3221,9 +3251,9 @@ int main(int argc, char** argv) {
             if (GetKeyPressed() > 0) {
                 state = STATE_MAIN_MENU;
                 if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
-                { int rndM = GetRandomValue(0, 1);
-                  if (rndM == 0) bgm = LoadMusicStream("assets/music/track1.mp3");
-                  else bgm = LoadMusicStream("assets/menu_theme.mp3"); }
+                bgm = LoadMusicStream("assets/music/track1.mp3");
+                gTargetMusicVol = 0.6f;
+                gCurrentMusicVol = 0.6f;
                 SetMusicVolume(bgm, 0.60f);
                 PlayMusicStream(bgm);
                 musicLoaded = true;
@@ -3949,13 +3979,13 @@ int main(int argc, char** argv) {
                 FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true,
-                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                round.fightBannerTimer > 0.0f ? 1.0f - (round.fightBannerTimer / ROUND_INTRO_TIME) : -1.0f,
                                 false, false);
                 DrawFighterBody(&p2, false,
-                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                round.fightBannerTimer > 0.0f ? 1.0f - (round.fightBannerTimer / ROUND_INTRO_TIME) : -1.0f,
                                 false, false);
                 DrawHUD(&p1, &p2, domainTimer, false, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
-                        round.bannerText, round.subText, round.introTimer);
+                        round.bannerText, round.subText, round.fightBannerTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
                 DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 break;
@@ -3971,13 +4001,13 @@ int main(int argc, char** argv) {
                 FloatingTextDraw();
                 DrawProjectiles(gProjectiles, MAX_PROJECTILES);
                 DrawFighterBody(&p1, true,
-                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                round.fightBannerTimer > 0.0f ? 1.0f - (round.fightBannerTimer / ROUND_INTRO_TIME) : -1.0f,
                                 domainCasterPlayer == 1, domainCasterPlayer == 2);
                 DrawFighterBody(&p2, false,
-                                round.introTimer > 0.0f ? 1.0f - (round.introTimer / ROUND_INTRO_TIME) : -1.0f,
+                                round.fightBannerTimer > 0.0f ? 1.0f - (round.fightBannerTimer / ROUND_INTRO_TIME) : -1.0f,
                                 domainCasterPlayer == 2, domainCasterPlayer == 1);
                 DrawHUD(&p1, &p2, domainTimer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
-                        round.bannerText, round.subText, round.introTimer);
+                        round.bannerText, round.subText, round.fightBannerTimer);
                 AnnounceDraw(SCREEN_W, SCREEN_H);
                 DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 if (target->isHeavenlyRestricted) {
@@ -3999,7 +4029,7 @@ int main(int argc, char** argv) {
                 DrawFighterBody(&p1, true, -1.0f, domainCasterPlayer == 1, domainCasterPlayer == 2);
                 DrawFighterBody(&p2, false, -1.0f, domainCasterPlayer == 2, domainCasterPlayer == 1);
                 DrawHUD(&p1, &p2, clash.timer, true, SCREEN_W, round.roundTimer, round.p1Wins, round.p2Wins,
-                        round.bannerText, round.subText, round.introTimer);
+                        round.bannerText, round.subText, round.fightBannerTimer);
                 DrawRCTFlashOverlay(SCREEN_W, SCREEN_H);
                 break;
 
