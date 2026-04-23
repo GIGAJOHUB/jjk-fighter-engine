@@ -193,7 +193,7 @@ bool DrawGojoSprite(const Fighter* fighter, bool isP1, float introProgress,
         src.width = -src.width;
     }
 
-    baseHeight = fighter->hitbox.height * 1.7f;
+    baseHeight = fighter->hitbox.height * 1.35f;
     aspect = (float)texture->width / (float)texture->height;
     width = baseHeight * aspect;
     dst = (Rectangle){
