@@ -84,7 +84,8 @@ static Projectile gProjectiles[MAX_PROJECTILES] = {0};
 static int gHitstopFrames = 0;
 
 typedef enum {
-    STATE_MAIN_MENU = 0,
+    STATE_INTRO = 0,
+    STATE_MAIN_MENU,
     STATE_ABOUT,
     STATE_CPU_DIFFICULTY,
     STATE_KEYBINDS,
@@ -3094,11 +3095,13 @@ int main(int argc, char** argv) {
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
     LoadGojoSpritePack("assets/sprites/gojo");
-    LoadSukunaSpritePack("assets/sprites/sukuna_s1");
+    LoadSukunaSpritePack("assets/sprites/meguna");
     LoadYujiSpritePack("assets/sprites/yuji_s1");
     LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
-    GameState state = STATE_MAIN_MENU;
+    GameState state = STATE_INTRO;
+    GameState prevState = STATE_INTRO;
+    int randomMusic = GetRandomValue(1, 3);
     MatchMode matchMode = MATCH_MODE_LOCAL;
     CpuDifficulty cpuDifficulty = CPU_NORMAL;
     SelectState p1sel = { 0, CHAR_SUKUNA, false };
@@ -3122,6 +3125,82 @@ int main(int argc, char** argv) {
     NetInput cpuPrevInput = {0};
 
     while (!WindowShouldClose()) {
+
+        if (state == STATE_BATTLE && prevState != STATE_BATTLE && prevState != STATE_PAUSE) {
+            int rnd = GetRandomValue(1, 3);
+            if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
+            if (rnd == 1) bgm = LoadMusicStream("assets/music/track1.mp3");
+            else if (rnd == 2) bgm = LoadMusicStream("assets/music/track2.mp3");
+            else bgm = LoadMusicStream("assets/music/track3.mp3");
+            SetMusicVolume(bgm, 0.60f);
+            PlayMusicStream(bgm);
+            musicLoaded = true;
+        }
+        prevState = state;
+
+
+        if (state == STATE_INTRO) {
+            static int introFrame = 1;
+            static float introTimer = 0.0f;
+            static Texture2D introTex = {0};
+            static bool introMusicPlaying = false;
+            
+            if (!introMusicPlaying) {
+                if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
+                bgm = LoadMusicStream("assets/music/intro_audio.mp3");
+                SetMusicVolume(bgm, 0.5f);
+                PlayMusicStream(bgm);
+                musicLoaded = true;
+                introMusicPlaying = true;
+            }
+            
+            introTimer += GetFrameTime();
+            if (introTimer >= 1.0f / 12.0f) {
+                introTimer = 0.0f;
+                introFrame++;
+                if (introFrame > 1078) introFrame = 1; // loop
+                char path[256];
+                sprintf(path, "assets/intro_frames/frame_%04d.jpg", introFrame);
+                if (introTex.id != 0) UnloadTexture(introTex);
+                introTex = LoadTexture(path);
+            }
+            
+            BeginDrawing();
+            ClearBackground(BLACK);
+            if (introTex.id != 0) {
+                DrawTexturePro(introTex, 
+                    (Rectangle){0, 0, introTex.width, introTex.height}, 
+                    (Rectangle){0, 0, GetScreenWidth(), GetScreenHeight()}, 
+                    (Vector2){0,0}, 0.0f, WHITE);
+            }
+            
+            static float textAlpha = 0.0f;
+            static bool textFadeIn = true;
+            if (textFadeIn) { textAlpha += GetFrameTime(); if (textAlpha >= 1.0f) { textAlpha = 1.0f; textFadeIn = false; } }
+            else { textAlpha -= GetFrameTime(); if (textAlpha <= 0.0f) { textAlpha = 0.0f; textFadeIn = true; } }
+            
+            Color titleCol = (Color){255, 50, 50, 255};
+            Color promptCol = (Color){255, 255, 255, (unsigned char)(textAlpha * 255.0f)};
+            
+            DrawTextEx(gRetroFont, "URUSAI MANIA", (Vector2){ GetScreenWidth()/2 - MeasureTextEx(gRetroFont, "URUSAI MANIA", 60, 2).x/2, 100 }, 60, 2, titleCol);
+            DrawTextEx(gRetroFont, "PRESS ANY KEY TO START", (Vector2){ GetScreenWidth()/2 - MeasureTextEx(gRetroFont, "PRESS ANY KEY TO START", 30, 2).x/2, GetScreenHeight() - 100 }, 30, 2, promptCol);
+            
+            if (GetKeyPressed() > 0) {
+                state = STATE_MAIN_MENU;
+                if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
+                int rnd = GetRandomValue(1, 4);
+                if (rnd == 1) bgm = LoadMusicStream("assets/music/track1.mp3");
+                else if (rnd == 2) bgm = LoadMusicStream("assets/music/track2.mp3");
+                else if (rnd == 3) bgm = LoadMusicStream("assets/music/track3.mp3");
+                else bgm = LoadMusicStream("assets/menu_theme.mp3");
+                SetMusicVolume(bgm, 0.60f);
+                PlayMusicStream(bgm);
+                musicLoaded = true;
+            }
+            EndDrawing();
+            continue;
+        }
+
         if (musicLoaded) {
             UpdateMusicStream(bgm);
             if (!IsMusicStreamPlaying(bgm) || GetMusicTimePlayed(bgm) >= GetMusicTimeLength(bgm) - 0.05f) {

@@ -67,7 +67,11 @@ typedef struct {
     SukunaAnim anims[SUKU_ANIM_COUNT];
 } SukunaSpritePack;
 
-static SukunaSpritePack gSukuna = {0};
+#ifdef CHARACTER_SUKUNA_SPRITE_IMPLEMENTATION
+SukunaSpritePack gSukuna = {0};
+#else
+extern SukunaSpritePack gSukuna;
+#endif
 
 /* ---- Helpers ---- */
 static SukunaTexEntry* SukunaGetTex(int group, int item) {
@@ -130,22 +134,22 @@ void LoadSukunaSpritePack(const char* folderPath) {
     /* Based on MUGEN Sukuna Ryomen S1: 
        Idle: 0, Walk: 20, Jump: 40, Crouch: 10, Block: 120, Hit: 5000, etc.
     */
-    SukunaBuildAnim(SUKU_ANIM_IDLE,         0,   10);
-    SukunaBuildAnim(SUKU_ANIM_WALK,         20,  10);
-    SukunaBuildAnim(SUKU_ANIM_JUMP,         40,  10);
-    SukunaBuildAnim(SUKU_ANIM_CROUCH,       10,  10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_LIGHT, 200, 10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_MED,   210, 10);
-    SukunaBuildAnim(SUKU_ANIM_ATTACK_HEAVY, 220, 10);
-    SukunaBuildAnim(SUKU_ANIM_BLOCK,        120, 10);
-    SukunaBuildAnim(SUKU_ANIM_HIT,          5000, 10);
-    SukunaBuildAnim(SUKU_ANIM_KNOCKDOWN,    5110, 20);
-    SukunaBuildAnim(SUKU_ANIM_DODGE,        100, 10);
-    SukunaBuildAnim(SUKU_ANIM_SPECIAL1,     11050, 20);
-    SukunaBuildAnim(SUKU_ANIM_SPECIAL2,     11060, 20);
-    SukunaBuildAnim(SUKU_ANIM_DOMAIN,       11090, 50);
-    SukunaBuildAnim(SUKU_ANIM_INTRO,        16100, 20);
-    SukunaBuildAnim(SUKU_ANIM_ULT,          11300, 20);
+    SukunaBuildAnim(SUKU_ANIM_IDLE,         10000, 10);
+    SukunaBuildAnim(SUKU_ANIM_WALK,         10020, 10);
+    SukunaBuildAnim(SUKU_ANIM_JUMP,         10040, 10);
+    SukunaBuildAnim(SUKU_ANIM_CROUCH,       10010, 10);
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_LIGHT, 11000, 10);
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_MED,   11000, 10);
+    SukunaBuildAnim(SUKU_ANIM_ATTACK_HEAVY, 11000, 10);
+    SukunaBuildAnim(SUKU_ANIM_BLOCK,        10000, 10);
+    SukunaBuildAnim(SUKU_ANIM_HIT,          10000, 10);
+    SukunaBuildAnim(SUKU_ANIM_KNOCKDOWN,    10500, 20);
+    SukunaBuildAnim(SUKU_ANIM_DODGE,        10040, 10);
+    SukunaBuildAnim(SUKU_ANIM_SPECIAL1,     11000, 20);
+    SukunaBuildAnim(SUKU_ANIM_SPECIAL2,     15000, 20);
+    SukunaBuildAnim(SUKU_ANIM_DOMAIN,       10000, 50);
+    SukunaBuildAnim(SUKU_ANIM_INTRO,        10000, 20);
+    SukunaBuildAnim(SUKU_ANIM_ULT,          18400, 20);
 
     /* Preload core animations */
     for (int a = SUKU_ANIM_IDLE; a <= SUKU_ANIM_WALK; a++) {
@@ -277,7 +281,7 @@ bool DrawSukunaSprite(const Fighter* fighter, bool isP1, float introProgress,
     SukunaTexEntry* entry = SukunaGetTex(ref.group, ref.item);
     if (!entry || entry->tex.id == 0) return false;
 
-    float scale = 2.0f;
+    float scale = 1.6f;
     float drawW = (float)entry->tex.width * scale;
     float drawH = (float)entry->tex.height * scale;
 

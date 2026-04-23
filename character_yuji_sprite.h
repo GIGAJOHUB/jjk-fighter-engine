@@ -60,7 +60,11 @@ typedef struct {
     YujiAnim anims[YUJI_ANIM_COUNT];
 } YujiSpritePack;
 
-static YujiSpritePack gYuji = {0};
+#ifdef CHARACTER_YUJI_SPRITE_IMPLEMENTATION
+YujiSpritePack gYuji = {0};
+#else
+extern YujiSpritePack gYuji;
+#endif
 
 static YujiTexEntry* YujiGetTex(int group, int item) {
     for (int i = 0; i < gYuji.count; i++) {
