@@ -1,0 +1,17 @@
+{
+  "name": "sff_node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "pngjs": "^7.0.0",
+    "sff-extractor": "^1.0.8"
+  }
+}

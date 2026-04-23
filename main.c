@@ -1083,7 +1083,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             }
             break;
 
-        case CHAR_SUKUNA:
+                case CHAR_SUKUNA:
             if (f->cursedEnergy >= CalcCECost(f, SUKUNA_DISMANTLE_COST)) {
                 Rectangle slash = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -34.0f), f->hitbox.y + 28.0f, 34.0f, 16.0f };
                 f->cursedEnergy -= CalcCECost(f, SUKUNA_DISMANTLE_COST);
@@ -1091,6 +1091,7 @@ static void UseAbility1(Fighter* f, Fighter* opponent, bool ownerIsP1) {
                                 (Vector2){ (float)f->facingDir * 15.0f, 0.0f }, 16.0f, 1.7f, 10.0f, false, true, 0.0f, 0.0f,
                                 (Color){255, 90, 90, 255});
                 f->specialAnimFrames = 10;
+                TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_DISMANTLE, 0.35f);
             }
             break;
 
@@ -1167,9 +1168,10 @@ static void UseAbility2(Fighter* f, Fighter* opponent, bool ownerIsP1) {
             }
             break;
 
-        case CHAR_SUKUNA: {
+                case CHAR_SUKUNA: {
             Rectangle cleave = { f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -76.0f), f->hitbox.y + 10.0f, 76.0f, 60.0f };
             f->specialAnimFrames = 14;
+            TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_CLEAVE, 0.45f);
             if (HorizontalGap(f, opponent) < 82.0f && CheckCollisionRecs(cleave, opponent->hurtbox)) {
                 ApplyCombatHit(f, opponent, 46.0f, 62.0f, 14, false, true, false, PARTICLE_SLASH_TRAIL, 20, false, 2);
             }
@@ -1244,6 +1246,24 @@ static void UseAbility3(Fighter* f, bool ownerIsP1) {
     switch (f->charData.id) {
         case CHAR_GOJO:
             ToggleInfinity(f);
+            break;
+        case CHAR_SUKUNA:
+            if (!f->ultActive && f->cursedEnergy >= 40.0f) {
+                f->cursedEnergy -= 40.0f;
+                f->activeUlt = ULT_FUGA;
+                f->ultActive = true;
+                f->ultDuration = 2.0f;
+                f->ultTimer = f->ultDuration;
+                f->ultStartupTimer = 0.45f;
+                f->ultSpeed = 8.0f * (float)f->facingDir;
+                f->ultHitbox = (Rectangle){
+                    f->hitbox.x + (f->facingDir > 0 ? f->hitbox.width : -42.0f),
+                    f->hitbox.y + 20.0f,
+                    42.0f, 18.0f
+                };
+                TriggerVisualEvent(f, VISUAL_EVENT_SUKUNA_FUGA, 0.45f);
+                ParticleSpawnBurst((Vector2){f->hitbox.x + f->hitbox.width * 0.5f, f->hitbox.y + f->hitbox.height}, 25, (Color){255, 120, 30, 255}, 0.5f, 5.0f, 10.0f, PARTICLE_SPARK);
+            }
             break;
         case CHAR_MEGUMI:
             f->specialAnimFrames = 16;
@@ -1334,10 +1354,11 @@ static void StartUltimate(Fighter* user, Fighter* target) {
             ShakeTrigger(12.0f, 0.45f);
             break;
 
-        case ULT_FUGA:
+                case ULT_FUGA:
             user->ultDuration = 2.0f;
             user->ultTimer    = user->ultDuration;
             user->ultStartupTimer = 0.45f;
+            TriggerVisualEvent(user, VISUAL_EVENT_SUKUNA_FUGA, 0.45f);
             user->ultSpeed    = 8.0f * (float)user->facingDir;
             user->ultHitbox   = (Rectangle){
                 user->hitbox.x + (user->facingDir > 0 ? user->hitbox.width : -42.0f),

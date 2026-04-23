@@ -15,9 +15,10 @@ bool DrawYujiSprite(const Fighter* fighter, bool isP1, float introProgress,
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define YUJI_MAX_ANIM_FRAMES 64
+#define YUJI_MAX_ANIM_FRAMES 128
 typedef struct { int group; int item; } YujiSpriteRef;
 
 typedef struct {
@@ -44,9 +45,9 @@ enum {
     YUJI_ANIM_COUNT
 };
 
-#define YUJI_TEX_CAPACITY 400
+#define YUJI_TEX_CAPACITY 3000
 typedef struct {
-    int group, item;
+    int group, item, axisx, axisy;
     Texture2D tex;
     bool valid;
 } YujiTexEntry;
@@ -61,36 +62,31 @@ typedef struct {
 
 static YujiSpritePack gYuji = {0};
 
-static Texture2D YujiGetTex(int group, int item) {
+static YujiTexEntry* YujiGetTex(int group, int item) {
     for (int i = 0; i < gYuji.count; i++) {
-        if (gYuji.entries[i].group == group && gYuji.entries[i].item == item && gYuji.entries[i].valid)
-            return gYuji.entries[i].tex;
-    }
-    if (gYuji.count < YUJI_TEX_CAPACITY) {
-        char path[512];
-        snprintf(path, sizeof(path), "%s/g%04d_i%04d.png", gYuji.basePath, group, item);
-        if (FileExists(path)) {
-            int idx = gYuji.count++;
-            gYuji.entries[idx].group = group;
-            gYuji.entries[idx].item = item;
-            gYuji.entries[idx].tex = LoadTexture(path);
-            SetTextureFilter(gYuji.entries[idx].tex, TEXTURE_FILTER_POINT);
-            gYuji.entries[idx].valid = true;
-            return gYuji.entries[idx].tex;
+        if (gYuji.entries[i].group == group && gYuji.entries[i].item == item) {
+            if (!gYuji.entries[i].valid) {
+                char path[512];
+                snprintf(path, sizeof(path), "%s/g%04d_i%04d.png", gYuji.basePath, group, item);
+                if (FileExists(path)) {
+                    gYuji.entries[i].tex = LoadTexture(path);
+                    SetTextureFilter(gYuji.entries[i].tex, TEXTURE_FILTER_POINT);
+                    gYuji.entries[i].valid = true;
+                }
+            }
+            return &gYuji.entries[i];
         }
     }
-    return (Texture2D){0};
+    return NULL;
 }
 
 static void YujiBuildAnim(int animId, int group, int maxItems) {
     YujiAnim* a = &gYuji.anims[animId];
     a->frameCount = 0;
-    for (int i = 0; i < maxItems && a->frameCount < YUJI_MAX_ANIM_FRAMES; i++) {
-        char path[512];
-        snprintf(path, sizeof(path), "%s/g%04d_i%04d.png", gYuji.basePath, group, i);
-        if (FileExists(path)) {
+    for (int i = 0; i < gYuji.count && a->frameCount < YUJI_MAX_ANIM_FRAMES; i++) {
+        if (gYuji.entries[i].group == group) {
             a->frames[a->frameCount].group = group;
-            a->frames[a->frameCount].item = i;
+            a->frames[a->frameCount].item = gYuji.entries[i].item;
             a->frameCount++;
         }
     }
@@ -100,19 +96,37 @@ void LoadYujiSpritePack(const char* folderPath) {
     memset(&gYuji, 0, sizeof(gYuji));
     strncpy(gYuji.basePath, folderPath, sizeof(gYuji.basePath) - 1);
     
+    char offsetPath[512];
+    snprintf(offsetPath, sizeof(offsetPath), "%s/offsets.txt", folderPath);
+    FILE* f = fopen(offsetPath, "r");
+    if (f) {
+        int g, i, x, y;
+        while (fscanf(f, "%d %d %d %d", &g, &i, &x, &y) == 4) {
+            if (gYuji.count < YUJI_TEX_CAPACITY) {
+                gYuji.entries[gYuji.count].group = g;
+                gYuji.entries[gYuji.count].item = i;
+                gYuji.entries[gYuji.count].axisx = x;
+                gYuji.entries[gYuji.count].axisy = y;
+                gYuji.entries[gYuji.count].valid = false;
+                gYuji.count++;
+            }
+        }
+        fclose(f);
+    }
+
     YujiBuildAnim(YUJI_ANIM_IDLE,         0,   10);
     YujiBuildAnim(YUJI_ANIM_WALK,         20,  10);
     YujiBuildAnim(YUJI_ANIM_JUMP,         40,  10);
-    YujiBuildAnim(YUJI_ANIM_CROUCH,       50,  10);
+    YujiBuildAnim(YUJI_ANIM_CROUCH,       10,  10);
     YujiBuildAnim(YUJI_ANIM_ATTACK_LIGHT, 200, 10);
     YujiBuildAnim(YUJI_ANIM_ATTACK_MED,   210, 10);
     YujiBuildAnim(YUJI_ANIM_ATTACK_HEAVY, 220, 10);
-    YujiBuildAnim(YUJI_ANIM_BLOCK,        400, 10);
+    YujiBuildAnim(YUJI_ANIM_BLOCK,        120, 10);
     YujiBuildAnim(YUJI_ANIM_HIT,          5000, 10);
-    YujiBuildAnim(YUJI_ANIM_KNOCKDOWN,    5300, 20);
-    YujiBuildAnim(YUJI_ANIM_DODGE,        190, 10);
-    YujiBuildAnim(YUJI_ANIM_SPECIAL1,     1050, 20);
-    YujiBuildAnim(YUJI_ANIM_SPECIAL2,     1060, 20);
+    YujiBuildAnim(YUJI_ANIM_KNOCKDOWN,    5110, 20);
+    YujiBuildAnim(YUJI_ANIM_DODGE,        100, 10);
+    YujiBuildAnim(YUJI_ANIM_SPECIAL1,     1000, 20);
+    YujiBuildAnim(YUJI_ANIM_SPECIAL2,     1010, 20);
     YujiBuildAnim(YUJI_ANIM_DOMAIN,       1090, 50);
     YujiBuildAnim(YUJI_ANIM_INTRO,        6100, 20);
 
@@ -123,16 +137,6 @@ void LoadYujiSpritePack(const char* folderPath) {
     }
     
     gYuji.ready = (gYuji.anims[YUJI_ANIM_IDLE].frameCount > 0);
-    if (gYuji.ready) {
-        printf("[Yuji] Sprite pack loaded: %d idle, %d walk, %d jump, %d crouch, %d attack frames\n",
-            gYuji.anims[YUJI_ANIM_IDLE].frameCount,
-            gYuji.anims[YUJI_ANIM_WALK].frameCount,
-            gYuji.anims[YUJI_ANIM_JUMP].frameCount,
-            gYuji.anims[YUJI_ANIM_CROUCH].frameCount,
-            gYuji.anims[YUJI_ANIM_ATTACK_LIGHT].frameCount +
-            gYuji.anims[YUJI_ANIM_ATTACK_MED].frameCount +
-            gYuji.anims[YUJI_ANIM_ATTACK_HEAVY].frameCount);
-    }
 }
 
 void UnloadYujiSpritePack(void) {
@@ -169,7 +173,6 @@ static YujiSpriteRef YujiChooseFrame(const Fighter* fighter, float introProgress
             return YujiAnimProgress(YUJI_ANIM_INTRO, introProgress);
         return YujiAnimProgress(YUJI_ANIM_IDLE, introProgress);
     }
-
     if (domainCast || domainCounter) {
         float progress = 1.0f;
         if (fighter->visualEventDuration > 0.0f)
@@ -177,16 +180,12 @@ static YujiSpriteRef YujiChooseFrame(const Fighter* fighter, float introProgress
         if (gYuji.anims[YUJI_ANIM_DOMAIN].frameCount > 0)
             return YujiAnimProgress(YUJI_ANIM_DOMAIN, progress);
     }
-
     if (fighter->isKnockedDown && gYuji.anims[YUJI_ANIM_KNOCKDOWN].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_KNOCKDOWN, 0.12f, false);
-
     if (fighter->hitStunFrames > 0 && gYuji.anims[YUJI_ANIM_HIT].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_HIT, 0.08f, false);
-
     if (fighter->isDodging && gYuji.anims[YUJI_ANIM_DODGE].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_DODGE, 0.06f, false);
-
     if (fighter->isAttacking) {
         float progress = 1.0f - ((float)fighter->attackFrames / 14.0f);
         if (fighter->blackFlashActive && gYuji.anims[YUJI_ANIM_ATTACK_HEAVY].frameCount > 0)
@@ -196,10 +195,8 @@ static YujiSpriteRef YujiChooseFrame(const Fighter* fighter, float introProgress
         if (gYuji.anims[YUJI_ANIM_ATTACK_LIGHT].frameCount > 0)
             return YujiAnimProgress(YUJI_ANIM_ATTACK_LIGHT, progress);
     }
-
     if (fighter->isBlocking && gYuji.anims[YUJI_ANIM_BLOCK].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_BLOCK, 0.1f, false);
-
     if (!fighter->onGround && gYuji.anims[YUJI_ANIM_JUMP].frameCount > 0) {
         float jumpProg = 0.5f;
         if (fighter->velY < -3.0f) jumpProg = 0.0f;
@@ -208,36 +205,38 @@ static YujiSpriteRef YujiChooseFrame(const Fighter* fighter, float introProgress
         else jumpProg = 0.9f;
         return YujiAnimProgress(YUJI_ANIM_JUMP, jumpProg);
     }
-
     if (fighter->isCrouching && gYuji.anims[YUJI_ANIM_CROUCH].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_CROUCH, 0.1f, false);
-
     if (fabsf(fighter->hitbox.x - fighter->prevX) > 0.5f && gYuji.anims[YUJI_ANIM_WALK].frameCount > 0)
         return YujiAnimFrame(YUJI_ANIM_WALK, 0.1f, true);
-
     return YujiAnimFrame(YUJI_ANIM_IDLE, 0.16f, true);
 }
 
 bool DrawYujiSprite(const Fighter* fighter, bool isP1, float introProgress,
                     bool domainCast, bool domainCounter) {
     if (!gYuji.ready || fighter->charData.id != CHAR_YUJI) return false;
-
     YujiSpriteRef ref = YujiChooseFrame(fighter, introProgress, domainCast, domainCounter);
-    Texture2D tex = YujiGetTex(ref.group, ref.item);
-    if (tex.id == 0) return false;
+    YujiTexEntry* entry = YujiGetTex(ref.group, ref.item);
+    if (!entry || entry->tex.id == 0) return false;
 
     float scale = 2.0f;
-    float drawW = (float)tex.width * scale;
-    float drawH = (float)tex.height * scale;
-
+    float drawW = (float)entry->tex.width * scale;
+    float drawH = (float)entry->tex.height * scale;
     float cx = fighter->hitbox.x + fighter->hitbox.width * 0.5f;
     float by = fighter->hitbox.y + fighter->hitbox.height;
 
-    Rectangle source = { 0, 0, (float)tex.width, (float)tex.height };
-    if (fighter->facingDir < 0) source.width = -source.width;
+    Rectangle source = { 0, 0, (float)entry->tex.width, (float)entry->tex.height };
+    float destX;
+    if (fighter->facingDir < 0) {
+        source.width = -source.width;
+        destX = cx - (entry->tex.width - entry->axisx) * scale;
+    } else {
+        destX = cx - entry->axisx * scale;
+    }
+    float destY = by - entry->axisy * scale;
 
-    Rectangle dest = { cx - drawW * 0.5f, by - drawH, drawW, drawH };
-    DrawTexturePro(tex, source, dest, (Vector2){0, 0}, 0.0f, WHITE);
+    Rectangle dest = { destX, destY, drawW, drawH };
+    DrawTexturePro(entry->tex, source, dest, (Vector2){0, 0}, 0.0f, WHITE);
     return true;
 }
 
