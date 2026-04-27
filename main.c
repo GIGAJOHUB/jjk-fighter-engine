@@ -3071,10 +3071,14 @@ int main(int argc, char** argv) {
     SetTargetFPS(60);
     InitAudioDevice();
     if (!gRoundsLoaded) {
-        gSfxRound1 = LoadSound("assets/sounds/round1.ogg");
-        gSfxRound2 = LoadSound("assets/sounds/round2.ogg");
-        gSfxRound3 = LoadSound("assets/sounds/round3.ogg");
-        gSfxFight  = LoadSound("assets/sounds/fight.ogg");
+        gSfxRound1 = LoadSound("assets/sounds/round1.wav");
+        gSfxRound2 = LoadSound("assets/sounds/round2.wav");
+        gSfxRound3 = LoadSound("assets/sounds/round3.wav");
+        gSfxFight  = LoadSound("assets/sounds/fight.wav");
+        SetSoundVolume(gSfxRound1, 1.0f);
+        SetSoundVolume(gSfxRound2, 1.0f);
+        SetSoundVolume(gSfxRound3, 1.0f);
+        SetSoundVolume(gSfxFight, 1.0f);
         gRoundsLoaded = true;
     }
     SetDefaultControls();
@@ -3910,13 +3914,34 @@ int main(int argc, char** argv) {
                     round.endTimer -= GetFrameTime();
                     if (round.endTimer <= 0.0f) {
                         if (round.p1Wins >= 2 || round.p2Wins >= 2) {
-                            round.endTimer = 0.0f;
+                            /* Match is over — show result text, then auto-return to menu */
+                            if (matchMode == MATCH_MODE_CPU) {
+                                snprintf(round.bannerText, sizeof(round.bannerText),
+                                         round.p1Wins >= 2 ? "YOU WIN!" : "YOU LOSE!");
+                            } else {
+                                snprintf(round.bannerText, sizeof(round.bannerText),
+                                         round.p1Wins >= 2 ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!");
+                            }
+                            round.subText[0] = '\0';
+                            round.endTimer = -4.0f; /* negative = match-end countdown */
                         } else {
                             round.roundNumber++;
                             StartNextRound(&round, &p1, &p2, &p1sel, &p2sel, &domainCasterPlayer, &domainTimer, &clash);
                             state = STATE_BATTLE;
                             break;
                         }
+                    }
+                }
+                /* Match-end auto-return timer (negative endTimer = counting up toward 0) */
+                if (round.endTimer < 0.0f) {
+                    round.endTimer += GetFrameTime();
+                    if (round.endTimer >= 0.0f) {
+                        /* Timer expired — return to main menu */
+                        ResetRoundState(&round);
+                        state = STATE_MAIN_MENU;
+                        p1sel.confirmed = false;
+                        p2sel.confirmed = false;
+                        break;
                     }
                 }
                 if (matchMode == MATCH_MODE_ONLINE && frontend.onlineResultTimer > 0.0f) {

@@ -84,12 +84,11 @@ static MAPlayback  gGojoPlay[2] = {{0}, {0}};  /* P1 and P2 slots */
 static bool gGojoLoaded = false;
 
 /*
- * Scale factor: MUGEN sprites are low-res pixel art.
- * The engine's hitbox height is ~90px. A typical standing Gojo sprite has
- * the character occupying roughly 62px vertically (content bbox y:62→124).
- * We scale the sprite so it fills the hitbox proportionally.
+ * Scale: The MUGEN axis Y tells us how many pixels from the top of the sprite
+ * to the character's feet. The fighter hitbox height IS the character's visible
+ * height. So scale = hitbox_height / axis_y (with some headroom for hair etc.)
+ * We compute this per-frame since different sprites have different axes.
  */
-#define GOJO_SPRITE_SCALE  1.8f
 
 /* ── Init / Cleanup ── */
 
@@ -217,14 +216,28 @@ bool DrawGojoSprite(const Fighter* fighter, bool isP1,
     MA_SetAction(pb, &gGojoChar, wanted);
     MA_Tick(pb, &gGojoChar);
 
-    /* Draw position: center-bottom of the fighter hitbox = MUGEN "feet" position.
-     * The axis from offsets.txt tells MA_Draw where the feet are in the sprite. */
-    float footX = fighter->hitbox.x + fighter->hitbox.width  * 0.5f;
+    /* Get the current frame to look up axis */
+    const MAFrame* curFrame = MA_CurrentFrame(pb, &gGojoChar);
+    if (!curFrame || curFrame->group < 0) return false;
+
+    /* Look up axis for this sprite */
+    int axisX = 0, axisY = 0;
+    MA_FindOffset(&gGojoChar, curFrame->group, curFrame->item, &axisX, &axisY);
+
+    /* Scale: axisY = distance from top of sprite to feet.
+     * We want the character to fill the fighter hitbox height.
+     * Add 10% headroom so hair/effects don't clip.
+     * Fallback to a safe default if axis is zero (palette sprites). */
+    float charPixelH = (axisY > 10) ? (float)axisY : 62.0f;
+    float scale = (fighter->hitbox.height * 1.1f) / charPixelH;
+
+    /* Draw position: center-bottom of hitbox = MUGEN feet position */
+    float footX = fighter->hitbox.x + fighter->hitbox.width * 0.5f;
     float footY = fighter->hitbox.y + fighter->hitbox.height;
 
-    MA_Draw(&gGojoChar, pb, footX, footY, (int)fighter->facingDir, GOJO_SPRITE_SCALE);
+    MA_Draw(&gGojoChar, pb, footX, footY, (int)fighter->facingDir, scale);
 
-    /* VFX overlays for abilities */
+    /* VFX overlays */
     if (fighter->visualEvent == VISUAL_EVENT_GOJO_BLUE) {
         float pulse = 18.0f + 4.0f * sinf((float)GetTime() * 8.0f);
         DrawCircle((int)footX, (int)(fighter->hitbox.y + 18.0f),

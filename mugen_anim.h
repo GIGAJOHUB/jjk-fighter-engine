@@ -292,6 +292,7 @@ static void MA_LoadAnims(MACharacter* c, const char* jsonPath) {
                             /* Parse frame fields */
                             while (*p && *p != '}') {
                                 MA_SkipWS(&p);
+                                if (*p == '}' || *p == '\0') break;  /* whitespace led to end */
                                 if (*p == '"') {
                                     char fkey[32];
                                     MA_ReadString(&p, fkey, sizeof(fkey));
