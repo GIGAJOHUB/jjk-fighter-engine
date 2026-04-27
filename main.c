@@ -2112,6 +2112,7 @@ static void StartDomain(Fighter* caster, Fighter* target, bool isP1,
     *domainCasterPlayer  = isP1 ? 1 : 2;
     *domainTimer         = DOMAIN_COUNTER_WINDOW;
     *state               = STATE_DOMAIN;
+    if (caster->charData.id == CHAR_SUKUNA) TriggerSukunaDomainSfx();
 
     AnnounceStart(caster->charData.domainName, caster->charData.name, caster->charData.domainAccentColor);
     ParticleSpawnBurst(
@@ -2158,6 +2159,7 @@ static void TriggerDomainClash(Fighter* challenger, Fighter* caster, bool challe
     }
 
     *state = STATE_DOMAIN_CLASH;
+    if (challenger->charData.id == CHAR_SUKUNA) TriggerSukunaDomainSfx();
     *domainTimer = 0.0f;
     gDomainAnnounce.active = false;
 
@@ -2320,6 +2322,7 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
         f->isAttacking  = true;
         f->attackFrames = 14;
         f->attackLanded = false;
+        if (f->charData.id == CHAR_SUKUNA) TriggerSukunaAttackSfx();
         if (!f->onGround) {
             f->attackFrames = 12;
         }
@@ -2550,23 +2553,20 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
 
     /* 3-second ROUND text then FIGHT! with SFX */
     if (!round->countdownDone) {
-        if (round->countdownTimer == 3.0f) {
-            /* Play Round X sound right at the start */
+        static int lastPlayedRound = -1;
+        if (round->countdownTimer > 2.85f && lastPlayedRound != round->roundNumber) {
             if (round->roundNumber == 1) PlaySound(gSfxRound1);
             else if (round->roundNumber == 2) PlaySound(gSfxRound2);
             else PlaySound(gSfxRound3);
-            round->countdownTimer -= 0.001f; /* slightly nudge so it doesn't trigger again */
+            lastPlayedRound = round->roundNumber;
         }
 
         if (round->countdownTimer > 0.0f) {
             round->countdownTimer -= GetFrameTime();
             if (round->countdownTimer < 0.0f) round->countdownTimer = 0.0f;
-            
-            /* Text stays as ROUND X */
             snprintf(round->bannerText, sizeof(round->bannerText), "ROUND %d", round->roundNumber);
             round->subText[0] = '\0';
-            
-            if (round->countdownTimer == 0.0f) {
+            if (round->countdownTimer <= 0.0f) {
                 PlaySound(gSfxFight);
             }
         } else if (round->fightBannerTimer < 2.0f) {
@@ -2578,9 +2578,10 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
             round->countdownDone = true;
             round->bannerText[0] = '\0';
             round->subText[0] = '\0';
+            lastPlayedRound = -1;
         }
-        if (round->countdownTimer > 0.0f) canAct = false; /* freeze until countdown hits 0 */
-        round->introTimer = 0.0f; /* neutralise old system */
+        if (round->countdownTimer > 0.0f) canAct = false;
+        round->introTimer = 0.0f;
     }
 
     if (round->roundActive && (*state == STATE_BATTLE || *state == STATE_DOMAIN || *state == STATE_DOMAIN_CLASH)) {
@@ -3065,7 +3066,7 @@ static void DrawFightVideoBackground(const FightVideo* video, bool domainActive,
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
-    InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash");
+    InitWindow(SCREEN_W, SCREEN_H, "URUSAI MANIA - Cursed Clash [v1.0.6]");
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
     InitAudioDevice();
@@ -3153,9 +3154,9 @@ int main(int argc, char** argv) {
         gojoPortraitLoaded = true;
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
-    LoadGojoSpritePack("assets/sprites/gojo");
-    LoadSukunaSpritePack("assets/sprites/meguna");
-    LoadSukunaSfx("assets/sounds/meguna");
+    LoadGojoSpritePack("assets/characters/gojo/sprites");
+    LoadSukunaSpritePack("assets/sprites/meguna_v5");
+    LoadSukunaSfx("assets/sounds/meguna_v5");
     LoadYujiSpritePack("assets/sprites/yuji_s1");
     LoadSavedUsername(mpMenu.username, sizeof(mpMenu.username));
 
@@ -3263,6 +3264,16 @@ int main(int argc, char** argv) {
         }
 
         if (musicLoaded) {
+            /* Smooth volume transitions */
+            if (gCurrentMusicVol < gTargetMusicVol) {
+                gCurrentMusicVol += GetFrameTime() * 0.4f;
+                if (gCurrentMusicVol > gTargetMusicVol) gCurrentMusicVol = gTargetMusicVol;
+            } else if (gCurrentMusicVol > gTargetMusicVol) {
+                gCurrentMusicVol -= GetFrameTime() * 0.4f;
+                if (gCurrentMusicVol < gTargetMusicVol) gCurrentMusicVol = gTargetMusicVol;
+            }
+            SetMusicVolume(bgm, gCurrentMusicVol);
+
             UpdateMusicStream(bgm);
             if (!IsMusicStreamPlaying(bgm) || GetMusicTimePlayed(bgm) >= GetMusicTimeLength(bgm) - 0.05f) {
                 StopMusicStream(bgm);

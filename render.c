@@ -829,12 +829,12 @@ void DrawHUD(Fighter* p1, Fighter* p2, float domainTimer, bool domainActive, int
         UiText(combo, (Vector2){ screenW * 0.5f - 150.0f, 150.0f }, 18.0f, 1.0f, (Color){255, 220, 140, 255});
     }
 
-    if (bannerTimer > 0.0f) {
-        float alpha = bannerTimer > 0.3f ? 1.0f : (bannerTimer / 0.3f);
+    if (bannerText != NULL && bannerText[0] != '\0') {
+        float alpha = 1.0f;
         float scale = 1.0f;
         if (strcmp(bannerText, "FIGHT!") == 0) {
-            scale = 1.0f + (1.0f - bannerTimer); // expands
-        } else {
+            if (bannerTimer > 1.5f) alpha = 1.0f - ((bannerTimer - 1.5f) / 0.5f);
+            scale = 1.0f + (bannerTimer * 0.5f);
             scale = 1.0f + 0.05f * sinf(bannerTimer * 8.0f); // slight pulse
         }
 
@@ -866,13 +866,9 @@ void DrawCharSelectScreen(int p1Cursor, int p2Cursor, bool p1Confirmed, bool p2C
     int gap = 24;
     float stripW = (float)(CHAR_COUNT * slotW + (CHAR_COUNT - 1) * gap);
     float focus = ((float)p1Cursor + (float)p2Cursor) * 0.5f;
-    float targetCenter = focus * (float)(slotW + gap) + slotW * 0.5f;
-    float offset = targetCenter - screenW * 0.5f;
-    float maxOffset = stripW - ((float)screenW - 120.0f);
-    if (maxOffset < 0.0f) maxOffset = 0.0f;
-    offset = Clamp(offset, -80.0f, maxOffset);
-    smoothedOffset += (offset - smoothedOffset) * 0.16f;
-    float startX = 60.0f - smoothedOffset;
+    float centerOffset = (screenW * 0.5f) - (focus * (slotW + gap) + slotW * 0.5f);
+    smoothedOffset += (centerOffset - smoothedOffset) * 0.14f;
+    float startX = smoothedOffset;
 
     DrawRectangle(0, 82, screenW, 330, (Color){0, 0, 0, 58});
     DrawLine(0, 412, screenW, 412, (Color){255, 214, 118, 120});

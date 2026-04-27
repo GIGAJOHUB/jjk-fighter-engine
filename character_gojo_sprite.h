@@ -1,3 +1,14 @@
+/*
+ * character_gojo_sprite.h
+ * TND-Gojo MUGEN integration via mugen_anim.h
+ *
+ * PUBLIC API (render.c-compatible):
+ *   LoadGojoSpritePack(path)   — loads anims.json + sprite folder
+ *   UnloadGojoSpritePack()     — cleanup
+ *   GojoSpritePackReady()      — is data loaded?
+ *   DrawGojoSprite(...)        — maps Fighter state → MUGEN action → draw
+ */
+
 #ifndef CHARACTER_GOJO_SPRITE_H
 #define CHARACTER_GOJO_SPRITE_H
 
@@ -11,210 +22,221 @@ bool GojoSpritePackReady(void);
 bool DrawGojoSprite(const Fighter* fighter, bool isP1, float introProgress,
                     bool domainCast, bool domainCounter);
 
+/* ────────────────────────────────────────────────────── */
 #ifdef CHARACTER_GOJO_SPRITE_IMPLEMENTATION
 
+#include "mugen_anim.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
-typedef struct {
-    Texture2D frames[71];
-    bool loaded[71];
-    bool ready;
-} GojoSpritePack;
+/* ── MUGEN Action IDs (mined from TND-Gojo.air) ── */
+enum {
+    GA_IDLE          =    0,
+    GA_IDLE2         =    5,
+    GA_CROUCH_DOWN   =   10,
+    GA_CROUCHING     =   11,
+    GA_STAND_UP      =   12,
+    GA_WALK_FWD      =   20,
+    GA_WALK_BACK     =   21,
+    GA_JUMP_START    =   40,
+    GA_JUMP_UP       =   41,
+    GA_JUMP_BACK     =   42,
+    GA_JUMP_FWD      =   43,
+    GA_JUMP_LAND     =   44,
+    GA_JUMP_FALL     =   45,
+    GA_RUN_FWD       =  100,
+    GA_RUN_BACK      =  105,
+    GA_GUARD_STAND   =  120,
+    GA_GUARD_CROUCH  =  130,
+    GA_GUARD_AIR     =  140,
+    GA_HIT_LIGHT     =  150,
+    GA_HIT_MED       =  151,
+    GA_HIT_HEAVY     =  152,
+    GA_LIE_DOWN      =  170,
+    GA_INTRO         =  190,
+    GA_ATK_STAND_L   =  200,
+    GA_ATK_STAND_M   =  210,
+    GA_ATK_STAND_H   =  220,
+    GA_ATK_STAND_3H  =  230,
+    GA_ATK_CROUCH_L  =  400,
+    GA_ATK_CROUCH_M  =  410,
+    GA_ATK_CROUCH_H  =  420,
+    GA_ATK_AIR_L     =  440,
+    GA_ATK_AIR_M     =  450,
+    /* Specials */
+    GA_BLUE_START    = 3000,
+    GA_BLUE_PROJ     = 3100,
+    GA_RED_START     = 3200,
+    GA_PURPLE_START  = 3300,
+    GA_PURPLE_BEAM   = 3310,
+    GA_DOMAIN_START  = 3400,
+    GA_DOMAIN_LOOP   = 3420,
+    /* Hit reactions */
+    GA_HIT_HIGH      = 5000,
+    GA_HIT_MID       = 5010,
+    GA_KNOCKDOWN     = 5050,
+};
 
-static GojoSpritePack gGojoSpritePack = {0};
+/* ── State ── */
+static MACharacter gGojoChar = {0};
+static MAPlayback  gGojoPlay[2] = {{0}, {0}};  /* P1 and P2 slots */
+static bool gGojoLoaded = false;
 
-static int GojoResolveFrame(int frameNumber) {
-    if (frameNumber < 1) frameNumber = 1;
-    if (frameNumber > 70) frameNumber = 70;
-    if (gGojoSpritePack.loaded[frameNumber]) return frameNumber;
-    for (int i = frameNumber - 1; i >= 1; --i) {
-        if (gGojoSpritePack.loaded[i]) return i;
-    }
-    for (int i = frameNumber + 1; i <= 70; ++i) {
-        if (gGojoSpritePack.loaded[i]) return i;
-    }
-    return 0;
-}
+/*
+ * Scale factor: MUGEN sprites are low-res pixel art.
+ * The engine's hitbox height is ~90px. A typical standing Gojo sprite has
+ * the character occupying roughly 62px vertically (content bbox y:62→124).
+ * We scale the sprite so it fills the hitbox proportionally.
+ */
+#define GOJO_SPRITE_SCALE  1.8f
 
-static int GojoSequenceFrame(int startFrame, int endFrame, float frameTime, bool loop) {
-    int frameCount = (endFrame - startFrame) + 1;
-    if (frameCount <= 1) return GojoResolveFrame(startFrame);
-    int index = (int)floor(GetTime() / frameTime);
-    if (loop) index %= frameCount;
-    else if (index >= frameCount) index = frameCount - 1;
-    return GojoResolveFrame(startFrame + index);
-}
-
-static int GojoProgressFrame(int startFrame, int endFrame, float progress) {
-    int frameCount = (endFrame - startFrame) + 1;
-    if (frameCount <= 1) return GojoResolveFrame(startFrame);
-    if (progress < 0.0f) progress = 0.0f;
-    if (progress > 1.0f) progress = 1.0f;
-    int index = (int)floor(progress * (float)frameCount);
-    if (index >= frameCount) index = frameCount - 1;
-    return GojoResolveFrame(startFrame + index);
-}
+/* ── Init / Cleanup ── */
 
 void LoadGojoSpritePack(const char* folderPath) {
-    char path[512];
-    gGojoSpritePack.ready = false;
+    const char* jsonPath = "assets/characters/gojo/anims.json";
+    const char* spritePath = folderPath;
 
-    for (int i = 1; i <= 70; ++i) {
-        snprintf(path, sizeof(path), "%s/gojo_%02d - selection.png", folderPath, i);
-        if (FileExists(path)) {
-            gGojoSpritePack.frames[i] = LoadTexture(path);
-            SetTextureFilter(gGojoSpritePack.frames[i], TEXTURE_FILTER_POINT);
-            gGojoSpritePack.loaded[i] = true;
-            gGojoSpritePack.ready = true;
-        }
+    if (!DirectoryExists(folderPath))
+        spritePath = "assets/characters/gojo/sprites";
+
+    MA_Init(&gGojoChar, spritePath, jsonPath);
+    gGojoLoaded = gGojoChar.ready;
+
+    if (gGojoLoaded) {
+        MA_ForceAction(&gGojoPlay[0], &gGojoChar, GA_IDLE);
+        MA_ForceAction(&gGojoPlay[1], &gGojoChar, GA_IDLE);
+        TraceLog(LOG_INFO, "GOJO: Ready — %d actions, %d offsets, sprites at %s",
+                 gGojoChar.actionCount, gGojoChar.offsetCount, spritePath);
+    } else {
+        TraceLog(LOG_WARNING, "GOJO: FAILED to load — sprites=%s, json=%s", spritePath, jsonPath);
     }
 }
 
 void UnloadGojoSpritePack(void) {
-    for (int i = 1; i <= 70; ++i) {
-        if (gGojoSpritePack.loaded[i]) {
-            UnloadTexture(gGojoSpritePack.frames[i]);
-            gGojoSpritePack.loaded[i] = false;
-        }
-    }
-    gGojoSpritePack.ready = false;
+    MA_Cleanup(&gGojoChar);
+    memset(gGojoPlay, 0, sizeof(gGojoPlay));
+    gGojoLoaded = false;
 }
 
-bool GojoSpritePackReady(void) {
-    return gGojoSpritePack.ready;
+bool GojoSpritePackReady(void) { return gGojoLoaded; }
+
+/* ── State-to-Action mapping ──
+ *
+ * Priority order (highest first):
+ *   1. Intro
+ *   2. Domain cast/counter
+ *   3. Visual events (abilities)
+ *   4. Hit stun / knockdown
+ *   5. Attacking
+ *   6. Blocking
+ *   7. Airborne
+ *   8. Crouching
+ *   9. Walking / running
+ *  10. Idle
+ */
+static int GojoPickAction(const Fighter* f, float introProgress,
+                          bool domainCast, bool domainCounter) {
+
+    /* 1. Intro */
+    if (introProgress >= 0.0f && introProgress < 1.0f)
+        return GA_INTRO;
+
+    /* 2. Domain */
+    if (domainCast)    return GA_DOMAIN_START;
+    if (domainCounter) return GA_DOMAIN_LOOP;
+
+    /* 3. Visual events (specials) */
+    switch (f->visualEvent) {
+        case VISUAL_EVENT_GOJO_PURPLE: return GA_PURPLE_START;
+        case VISUAL_EVENT_GOJO_BLUE:   return GA_BLUE_START;
+        case VISUAL_EVENT_GOJO_RED:    return GA_RED_START;
+        case VISUAL_EVENT_GOJO_INFINITY: return GA_IDLE2;
+        default: break;
+    }
+
+    /* 4. Hit reactions */
+    if (f->hitStunFrames > 0) {
+        if (!f->onGround) return GA_KNOCKDOWN;
+        if (f->isCrouching) return GA_HIT_MID;
+        return GA_HIT_HIGH;
+    }
+
+    /* 5. Attacking */
+    if (f->isAttacking) {
+        if (!f->onGround)   return GA_ATK_AIR_L;
+        if (f->isCrouching) return GA_ATK_CROUCH_L;
+        /* Vary attack animation by a simple heuristic */
+        return GA_ATK_STAND_M;
+    }
+
+    /* 6. Blocking */
+    if (f->isBlocking) {
+        if (!f->onGround)   return GA_GUARD_AIR;
+        if (f->isCrouching) return GA_GUARD_CROUCH;
+        return GA_GUARD_STAND;
+    }
+
+    /* 7. Airborne */
+    if (!f->onGround) {
+        if (f->velY < -3.0f) return GA_JUMP_UP;
+        if (f->velY < 0.0f)  return GA_JUMP_FWD;
+        if (f->velY < 3.0f)  return GA_JUMP_FALL;
+        return GA_JUMP_LAND;
+    }
+
+    /* 8. Landing recovery */
+    if (f->landingRecoverTimer > 0.0f)
+        return GA_JUMP_LAND;
+
+    /* 9. Crouching */
+    if (f->isCrouching) return GA_CROUCHING;
+    if (f->crouchRecoverTimer > 0.0f) return GA_STAND_UP;
+
+    /* 10. Movement */
+    float dx = f->hitbox.x - f->prevX;
+    if (fabsf(dx) > 0.75f) {
+        bool forward = (dx * f->facingDir) > 0;
+        return forward ? GA_WALK_FWD : GA_WALK_BACK;
+    }
+
+    return GA_IDLE;
 }
 
-static int GojoChooseFrame(const Fighter* fighter, float introProgress, bool domainCast, bool domainCounter) {
-    if (introProgress >= 0.0f && introProgress < 1.0f) {
-        return GojoProgressFrame(23, 31, introProgress);
-    }
+/* ── Draw ── */
+bool DrawGojoSprite(const Fighter* fighter, bool isP1,
+                    float introProgress, bool domainCast, bool domainCounter) {
 
-    if (domainCounter) {
-        float progress = 1.0f;
-        if (fighter->visualEventDuration > 0.0f) {
-            progress = 1.0f - (fighter->visualEventTimer / fighter->visualEventDuration);
-        }
-        return GojoProgressFrame(65, 70, progress);
-    }
+    if (!gGojoLoaded || fighter->charData.id != CHAR_GOJO) return false;
 
-    if (domainCast) {
-        float progress = 1.0f;
-        if (fighter->visualEventDuration > 0.0f) {
-            progress = 1.0f - (fighter->visualEventTimer / fighter->visualEventDuration);
-        }
-        return GojoProgressFrame(58, 64, progress);
-    }
+    int slot = isP1 ? 0 : 1;
+    MAPlayback* pb = &gGojoPlay[slot];
 
-    switch (fighter->visualEvent) {
-        case VISUAL_EVENT_GOJO_PURPLE: {
-            float progress = 1.0f;
-            if (fighter->visualEventDuration > 0.0f) {
-                progress = 1.0f - (fighter->visualEventTimer / fighter->visualEventDuration);
-            }
-            return GojoProgressFrame(46, 57, progress);
-        }
+    /* Pick and set animation */
+    int wanted = GojoPickAction(fighter, introProgress, domainCast, domainCounter);
+    MA_SetAction(pb, &gGojoChar, wanted);
+    MA_Tick(pb, &gGojoChar);
 
-        case VISUAL_EVENT_GOJO_RED:
-        case VISUAL_EVENT_GOJO_BLUE: {
-            float progress = 1.0f;
-            if (fighter->visualEventDuration > 0.0f) {
-                progress = 1.0f - (fighter->visualEventTimer / fighter->visualEventDuration);
-            }
-            return GojoProgressFrame(32, 34, progress);
-        }
+    /* Draw position: center-bottom of the fighter hitbox = MUGEN "feet" position.
+     * The axis from offsets.txt tells MA_Draw where the feet are in the sprite. */
+    float footX = fighter->hitbox.x + fighter->hitbox.width  * 0.5f;
+    float footY = fighter->hitbox.y + fighter->hitbox.height;
 
-        case VISUAL_EVENT_GOJO_INFINITY:
-            if (fighter->infinityActive) {
-                float progress = 1.0f;
-                if (fighter->visualEventDuration > 0.0f) {
-                    progress = 1.0f - (fighter->visualEventTimer / fighter->visualEventDuration);
-                }
-                if (progress < 0.85f) return GojoProgressFrame(43, 45, progress / 0.85f);
-                return GojoResolveFrame(45);
-            }
-            break;
+    MA_Draw(&gGojoChar, pb, footX, footY, (int)fighter->facingDir, GOJO_SPRITE_SCALE);
 
-        default:
-            break;
-    }
-
-    if (fighter->isAttacking) {
-        float progress = 1.0f - ((float)fighter->attackFrames / 14.0f);
-        return GojoProgressFrame(50, 54, progress);
-    }
-
-    if (!fighter->onGround) {
-        if (fighter->velY < -3.0f) return GojoResolveFrame(19);
-        if (fighter->velY < 1.5f) return GojoResolveFrame(20);
-        if (fighter->velY < 5.0f) return GojoResolveFrame(21);
-        return GojoResolveFrame(22);
-    }
-
-    if (fighter->landingRecoverTimer > 0.0f) {
-        return GojoResolveFrame(22);
-    }
-
-    if (fighter->isCrouching) {
-        return GojoSequenceFrame(12, 15, 0.08f, false);
-    }
-
-    if (fighter->crouchRecoverTimer > 0.0f) {
-        float progress = 1.0f - (fighter->crouchRecoverTimer / 0.18f);
-        return GojoProgressFrame(16, 18, progress);
-    }
-
-    if (fabsf(fighter->hitbox.x - fighter->prevX) > 0.75f) {
-        return GojoSequenceFrame(6, 11, 0.08f, true);
-    }
-
-    return GojoSequenceFrame(1, 5, 0.18f, true);
-}
-
-bool DrawGojoSprite(const Fighter* fighter, bool isP1, float introProgress,
-                    bool domainCast, bool domainCounter) {
-    int frame = 0;
-    const Texture2D* texture;
-    Rectangle src;
-    Rectangle dst;
-    float baseHeight;
-    float aspect;
-    float width;
-
-    if (!gGojoSpritePack.ready || fighter->charData.id != CHAR_GOJO) return false;
-    (void)isP1;
-
-    frame = GojoChooseFrame(fighter, introProgress, domainCast, domainCounter);
-    if (frame == 0 || !gGojoSpritePack.loaded[frame]) return false;
-
-    texture = &gGojoSpritePack.frames[frame];
-    src = (Rectangle){0.0f, 0.0f, (float)texture->width, (float)texture->height};
-    if (fighter->facingDir < 0) {
-        src.width = -src.width;
-    }
-
-    baseHeight = fighter->hitbox.height * 1.35f;
-    aspect = (float)texture->width / (float)texture->height;
-    width = baseHeight * aspect;
-    dst = (Rectangle){
-        fighter->hitbox.x + fighter->hitbox.width * 0.5f - width * 0.5f,
-        fighter->hitbox.y + fighter->hitbox.height - baseHeight,
-        width,
-        baseHeight
-    };
-    DrawTexturePro(*texture, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
-
+    /* VFX overlays for abilities */
     if (fighter->visualEvent == VISUAL_EVENT_GOJO_BLUE) {
-        DrawCircle((int)(fighter->hitbox.x + fighter->hitbox.width * 0.5f), (int)(fighter->hitbox.y + 18.0f),
-                   18.0f + 4.0f * sinf((float)GetTime() * 8.0f), ColorAlpha((Color){90, 170, 255, 255}, 0.18f));
+        float pulse = 18.0f + 4.0f * sinf((float)GetTime() * 8.0f);
+        DrawCircle((int)footX, (int)(fighter->hitbox.y + 18.0f),
+                   pulse, ColorAlpha((Color){90, 170, 255, 255}, 0.18f));
     } else if (fighter->visualEvent == VISUAL_EVENT_GOJO_RED) {
-        DrawCircle((int)(fighter->hitbox.x + fighter->hitbox.width * 0.5f), (int)(fighter->hitbox.y + 18.0f),
-                   18.0f + 4.0f * sinf((float)GetTime() * 8.0f), ColorAlpha((Color){255, 95, 95, 255}, 0.18f));
+        float pulse = 18.0f + 4.0f * sinf((float)GetTime() * 8.0f);
+        DrawCircle((int)footX, (int)(fighter->hitbox.y + 18.0f),
+                   pulse, ColorAlpha((Color){255, 95, 95, 255}, 0.18f));
     }
 
     return true;
 }
 
-#endif
-
-#endif
+#endif /* CHARACTER_GOJO_SPRITE_IMPLEMENTATION */
+#endif /* CHARACTER_GOJO_SPRITE_H */
