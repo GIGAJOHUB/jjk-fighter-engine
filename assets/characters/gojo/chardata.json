@@ -1,0 +1,1791 @@
+{
+  "name": "Gojo",
+  "mugen_version": "1.1",
+  "physics": {
+    "walk_fwd": 1.5,
+    "walk_back": -1.5,
+    "run_fwd": [
+      10.6,
+      0
+    ],
+    "run_back": [
+      -4.5,
+      -3.8
+    ],
+    "jump_y": [
+      0,
+      -8.4
+    ],
+    "jump_fwd_x": 2.5,
+    "jump_back_x": -2.55,
+    "yaccel": 0.44,
+    "stand_friction": 0.85,
+    "crouch_friction": 0.82,
+    "airjump_num": 8,
+    "airjump_height": 35
+  },
+  "size": {
+    "xscale": 1,
+    "yscale": 1,
+    "ground_back": 15,
+    "ground_front": 16,
+    "height": 60,
+    "attack_dist": 160,
+    "head_pos": [
+      -5,
+      -50
+    ],
+    "mid_pos": [
+      -5,
+      -25
+    ]
+  },
+  "data": {
+    "life": 1000,
+    "power": 3000,
+    "attack": 100,
+    "defence": 100
+  },
+  "input_map": {
+    "Infinite": 3400,
+    "Red": 3000,
+    "Blue": 3100,
+    "Blue2": 3000,
+    "Combo1": 3100,
+    "Domain": 3300,
+    "Run Fwd": 100,
+    "Run Back": 105
+  },
+  "states": {
+    "170": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 170,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "180": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 180,
+      "next_states": [
+        181
+      ]
+    },
+    "181": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 180,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "190": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 190,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "9900": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 9900,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 15,
+          "guard_damage": 7,
+          "animtype": "Light",
+          "pausetime": [
+            6,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            2.0
+          ],
+          "air_velocity": [
+            2.0,
+            -3.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S4,4"
+        },
+        {
+          "value": "S6,13"
+        }
+      ],
+      "next_states": [
+        200,
+        240,
+        0
+      ]
+    },
+    "6541": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S400,3"
+        }
+      ],
+      "next_states": [
+        5050
+      ]
+    },
+    "195": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 195,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "200": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 200,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 60,
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -4.0
+          ],
+          "air_velocity": [
+            -1.4,
+            -3.0
+          ]
+        }
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "3000": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3000,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S7,0"
+        },
+        {
+          "value": "S3,3"
+        }
+      ],
+      "next_states": [
+        3005
+      ]
+    },
+    "3005": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3005,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S7,1"
+        },
+        {
+          "value": "S7,1"
+        },
+        {
+          "value": "S7,1"
+        },
+        {
+          "value": "S7,1"
+        }
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "3002": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3002,
+      "sounds": [
+        {
+          "value": "S6,17"
+        },
+        {
+          "value": "S6,18"
+        },
+        {
+          "value": "S6,26"
+        },
+        {
+          "value": "S6,26"
+        },
+        {
+          "value": "S6,28"
+        }
+      ],
+      "next_states": [
+        30022,
+        30029
+      ]
+    },
+    "30022": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3002,
+      "hitdefs": [
+        {
+          "damage": 0,
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -4.0
+          ],
+          "air_velocity": [
+            -1.4,
+            -3.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,25"
+        },
+        {
+          "value": "S6,25"
+        },
+        {
+          "value": "S6,25"
+        }
+      ],
+      "next_states": [
+        30025,
+        30030,
+        30026
+      ]
+    },
+    "30024": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3006,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "animtype": "Light",
+          "pausetime": [
+            5,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            -4.0,
+            -5.0
+          ],
+          "air_velocity": [
+            -4.0,
+            -5.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,16"
+        },
+        {
+          "value": "S6,16"
+        },
+        {
+          "value": "S6,20"
+        }
+      ]
+    },
+    "30025": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3007,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "animtype": "Light",
+          "pausetime": [
+            5,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            -4.0,
+            -5.0
+          ],
+          "air_velocity": [
+            -4.0,
+            -5.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,16"
+        },
+        {
+          "value": "S6,16"
+        },
+        {
+          "value": "S6,20"
+        }
+      ]
+    },
+    "30026": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3002,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 0,
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            10
+          ],
+          "ground_slidetime": 10,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -6.0
+          ],
+          "air_velocity": [
+            -6.0,
+            4.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,22"
+        },
+        {
+          "value": "S6,6"
+        }
+      ],
+      "next_states": [
+        30024,
+        30030,
+        30024
+      ]
+    },
+    "30028": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 30028,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "animtype": "Light",
+          "pausetime": [
+            3,
+            0
+          ],
+          "ground_slidetime": 15,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -15.0,
+            0.0
+          ]
+        },
+        {
+          "animtype": "Light",
+          "pausetime": [
+            3,
+            0
+          ],
+          "ground_slidetime": 15,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -12.0,
+            0.0
+          ],
+          "air_velocity": [
+            -12.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    "30029": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3002
+    },
+    "3100": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3100,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S7,3"
+        },
+        {
+          "value": "S7,3"
+        },
+        {
+          "value": "S7,3"
+        },
+        {
+          "value": "S7,3"
+        },
+        {
+          "value": "S7,5"
+        },
+        {
+          "value": "S7,5"
+        },
+        {
+          "value": "S7,5"
+        },
+        {
+          "value": "S7,5"
+        },
+        {
+          "value": "S3,1"
+        },
+        {
+          "value": "S3,1"
+        },
+        {
+          "value": "S3,3"
+        }
+      ],
+      "next_states": [
+        3101
+      ]
+    },
+    "3101": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3101,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S10,3"
+        },
+        {
+          "value": "S10,1"
+        },
+        {
+          "value": "S7,2"
+        },
+        {
+          "value": "S7,2"
+        },
+        {
+          "value": "S7,2"
+        },
+        {
+          "value": "S7,2"
+        },
+        {
+          "value": "S7,4"
+        },
+        {
+          "value": "S7,4"
+        },
+        {
+          "value": "S7,4"
+        },
+        {
+          "value": "S7,4"
+        }
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "3110": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3110,
+      "sounds": [
+        {
+          "value": "S6,23"
+        },
+        {
+          "value": "S6,23"
+        },
+        {
+          "value": "S6,17"
+        },
+        {
+          "value": "S6,15"
+        },
+        {
+          "value": "S6,15"
+        }
+      ],
+      "next_states": [
+        3111,
+        3111,
+        3120
+      ]
+    },
+    "3111": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3111,
+      "hitdefs": [
+        {
+          "animtype": "Light",
+          "pausetime": [
+            2,
+            15
+          ],
+          "ground_slidetime": 10,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            2.0
+          ],
+          "air_velocity": [
+            2.0,
+            -2.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,10"
+        }
+      ],
+      "next_states": [
+        3120,
+        3125,
+        3140
+      ]
+    },
+    "3120": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3110,
+      "sounds": [
+        {
+          "value": "S6,10"
+        }
+      ]
+    },
+    "3125": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 31125,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "animtype": "Up",
+          "pausetime": [
+            5,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            0.0,
+            -8.0
+          ],
+          "air_velocity": [
+            0.0,
+            -8.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,19"
+        },
+        {
+          "value": "S6,21"
+        }
+      ]
+    },
+    "3130": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3130,
+      "hitdefs": [
+        {
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            10
+          ],
+          "ground_slidetime": 10,
+          "ground_hittime": 5
+        }
+      ],
+      "next_states": [
+        3131,
+        3131
+      ]
+    },
+    "3131": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3131,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "30030": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3002,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "3140": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 30027,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S6,29"
+        },
+        {
+          "value": "S6,29"
+        },
+        {
+          "value": "S6,37"
+        },
+        {
+          "value": "S6,34"
+        },
+        {
+          "value": "S6,34"
+        },
+        {
+          "value": "S6,34"
+        }
+      ],
+      "next_states": [
+        3141
+      ]
+    },
+    "3141": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 30027,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 2,
+          "animtype": "Up",
+          "pausetime": [
+            1,
+            30
+          ],
+          "ground_slidetime": 10,
+          "ground_hittime": 35,
+          "ground_velocity": [
+            0.0,
+            -3.0
+          ],
+          "air_velocity": [
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,31"
+        },
+        {
+          "value": "S6,31"
+        },
+        {
+          "value": "S6,31"
+        },
+        {
+          "value": "S6,31"
+        },
+        {
+          "value": "S6,31"
+        },
+        {
+          "value": "S6,34"
+        },
+        {
+          "value": "S6,34"
+        },
+        {
+          "value": "S6,34"
+        },
+        {
+          "value": "S6,32"
+        },
+        {
+          "value": "S6,32"
+        }
+      ],
+      "next_states": [
+        3142
+      ]
+    },
+    "3142": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3142,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S6,24"
+        },
+        {
+          "value": "S6,24"
+        },
+        {
+          "value": "S6,24"
+        },
+        {
+          "value": "S6,24"
+        }
+      ],
+      "next_states": [
+        3143
+      ]
+    },
+    "3143": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3143,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "animtype": "Diagup",
+          "pausetime": [
+            5,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            -6.0,
+            -6.0
+          ],
+          "air_velocity": [
+            -6.0,
+            -6.0
+          ]
+        }
+      ],
+      "sounds": [
+        {
+          "value": "S6,36"
+        },
+        {
+          "value": "S6,36"
+        },
+        {
+          "value": "S6,33"
+        }
+      ]
+    },
+    "3139": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3139
+    },
+    "31555": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000
+    },
+    "3300": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3300,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 0,
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            10
+          ],
+          "ground_slidetime": 5
+        }
+      ],
+      "next_states": [
+        3301,
+        0
+      ]
+    },
+    "3301": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 0,
+      "next_states": [
+        3302
+      ]
+    },
+    "3302": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 0,
+      "next_states": [
+        3303
+      ]
+    },
+    "3303": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 0,
+      "next_states": [
+        3304
+      ]
+    },
+    "3304": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 0,
+      "next_states": [
+        3305
+      ]
+    },
+    "3305": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 41,
+      "sounds": [
+        {
+          "value": "S400,8"
+        }
+      ],
+      "next_states": [
+        50
+      ]
+    },
+    "3310": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3310,
+      "hitdefs": [
+        {
+          "damage": 0,
+          "animtype": "Light",
+          "pausetime": [
+            10,
+            10
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 12,
+          "ground_velocity": [
+            -4.0
+          ],
+          "air_velocity": [
+            -1.4,
+            -3.0
+          ]
+        }
+      ]
+    },
+    "3320": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1,
+      "next_states": [
+        3321,
+        3380
+      ]
+    },
+    "3321": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1,
+      "next_states": [
+        3322,
+        3380
+      ]
+    },
+    "3322": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1
+    },
+    "3380": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1
+    },
+    "3350": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000
+    },
+    "3351": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000
+    },
+    "3352": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000
+    },
+    "3353": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5000
+    },
+    "3354": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 5050
+    },
+    "3400": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 0,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "0": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 0,
+      "next_states": [
+        5050
+      ]
+    },
+    "10": {
+      "type": "C",
+      "movetype": "I",
+      "physics": "C",
+      "anim": 10,
+      "next_states": [
+        11
+      ]
+    },
+    "11": {
+      "type": "C",
+      "movetype": "I",
+      "physics": "C",
+      "anim": 11
+    },
+    "12": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 12,
+      "next_states": [
+        0
+      ]
+    },
+    "20": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 20
+    },
+    "40": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 40,
+      "next_states": [
+        50
+      ]
+    },
+    "45": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "N",
+      "anim": 45,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        50
+      ]
+    },
+    "50": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "A",
+      "anim": 50
+    },
+    "51": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "A",
+      "anim": 51
+    },
+    "52": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 47,
+      "next_states": [
+        0
+      ]
+    },
+    "100": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 100,
+      "sounds": [
+        {
+          "value": "S100,0"
+        }
+      ],
+      "next_states": [
+        101
+      ]
+    },
+    "101": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 101,
+      "sounds": [
+        {
+          "value": "S201,0"
+        },
+        {
+          "value": "S201,0"
+        },
+        {
+          "value": "S201,0"
+        }
+      ],
+      "next_states": [
+        0
+      ]
+    },
+    "105": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "A",
+      "anim": 105,
+      "next_states": [
+        106
+      ]
+    },
+    "106": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 47,
+      "next_states": [
+        0
+      ]
+    },
+    "120": {
+      "type": "U",
+      "movetype": "I",
+      "physics": "U",
+      "anim": 120,
+      "next_states": [
+        140
+      ]
+    },
+    "130": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 130,
+      "next_states": [
+        131,
+        140
+      ]
+    },
+    "131": {
+      "type": "C",
+      "movetype": "I",
+      "physics": "C",
+      "anim": 131,
+      "next_states": [
+        130,
+        140
+      ]
+    },
+    "132": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "N",
+      "anim": 132,
+      "next_states": [
+        130,
+        52,
+        140
+      ]
+    },
+    "140": {
+      "type": "U",
+      "movetype": "I",
+      "physics": "U",
+      "anim": 140
+    },
+    "150": {
+      "type": "S",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 150,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "151": {
+      "type": "S",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 150,
+      "next_states": [
+        130
+      ]
+    },
+    "152": {
+      "type": "C",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 152,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "153": {
+      "type": "C",
+      "movetype": "H",
+      "physics": "C",
+      "anim": 151,
+      "next_states": [
+        131
+      ]
+    },
+    "154": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 154,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        155
+      ]
+    },
+    "155": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 152,
+      "next_states": [
+        130,
+        52
+      ]
+    },
+    "175": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 175,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        170
+      ]
+    },
+    "191": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 191,
+      "next_states": [
+        0
+      ]
+    },
+    "5000": {
+      "type": "S",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5000,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        5001,
+        5030
+      ]
+    },
+    "5001": {
+      "type": "S",
+      "movetype": "H",
+      "physics": "S",
+      "anim": 5001,
+      "next_states": [
+        0
+      ]
+    },
+    "5010": {
+      "type": "C",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5010,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        5011,
+        5030
+      ]
+    },
+    "5011": {
+      "type": "C",
+      "movetype": "H",
+      "physics": "C",
+      "anim": 5011,
+      "next_states": [
+        11
+      ]
+    },
+    "5020": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5020,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        5030
+      ]
+    },
+    "5030": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5030,
+      "next_states": [
+        5040,
+        5050,
+        5035
+      ]
+    },
+    "5035": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5035,
+      "next_states": [
+        5040,
+        5050
+      ]
+    },
+    "5040": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5040,
+      "next_states": [
+        5050,
+        52
+      ]
+    },
+    "5050": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5050,
+      "next_states": [
+        5200,
+        5210,
+        5100
+      ]
+    },
+    "5070": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5070,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        5071
+      ]
+    },
+    "5071": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5071,
+      "next_states": [
+        5110
+      ]
+    },
+    "5080": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5080,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        5081,
+        5030
+      ]
+    },
+    "5081": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "C",
+      "anim": 5081,
+      "next_states": [
+        5110
+      ]
+    },
+    "5100": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5100,
+      "next_states": [
+        5110,
+        5101
+      ]
+    },
+    "5101": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5101,
+      "next_states": [
+        5110
+      ]
+    },
+    "5110": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5110,
+      "next_states": [
+        5150
+      ]
+    },
+    "5120": {
+      "type": "L",
+      "movetype": "I",
+      "physics": "N",
+      "anim": 5120,
+      "next_states": [
+        0
+      ]
+    },
+    "5150": {
+      "type": "L",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5150
+    },
+    "5200": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "N",
+      "anim": 5200
+    },
+    "5201": {
+      "type": "A",
+      "movetype": "H",
+      "physics": "A",
+      "anim": 5200
+    },
+    "5210": {
+      "type": "A",
+      "movetype": "I",
+      "physics": "N",
+      "anim": 5210,
+      "next_states": [
+        52
+      ]
+    },
+    "5500": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 5300,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "5900": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 5900,
+      "next_states": [
+        190,
+        0
+      ]
+    },
+    "2330": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 230,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S6,1000"
+        },
+        {
+          "value": "S6,1000"
+        }
+      ],
+      "next_states": [
+        11
+      ]
+    },
+    "2331": {
+      "type": "S",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 230,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S6,1000"
+        },
+        {
+          "value": "S6,1000"
+        }
+      ],
+      "next_states": [
+        11
+      ]
+    },
+    "12000": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 12000,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S2,15"
+        },
+        {
+          "value": "S2,15"
+        },
+        {
+          "value": "S2,15"
+        }
+      ]
+    },
+    "12001": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 12001,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "sounds": [
+        {
+          "value": "S2,15"
+        },
+        {
+          "value": "S2,15"
+        },
+        {
+          "value": "S2,15"
+        },
+        {
+          "value": "S201,0"
+        },
+        {
+          "value": "S201,0"
+        },
+        {
+          "value": "S201,0"
+        }
+      ]
+    },
+    "-2": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": -2
+    },
+    "-3": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": -3,
+      "sounds": [
+        {
+          "value": "S40,0"
+        },
+        {
+          "value": "S40,0"
+        },
+        {
+          "value": "S40,1"
+        },
+        {
+          "value": "S40,2"
+        },
+        {
+          "value": "S52,0"
+        },
+        {
+          "value": "S5050,0"
+        }
+      ],
+      "next_states": [
+        2330,
+        2331,
+        6541
+      ]
+    },
+    "6000": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1
+    },
+    "3410": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        3411
+      ]
+    },
+    "3411": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 1,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "next_states": [
+        3410
+      ]
+    },
+    "3420": {
+      "type": "S",
+      "movetype": "I",
+      "physics": "S",
+      "anim": 3420,
+      "velset": [
+        0.0,
+        0.0
+      ]
+    },
+    "3430": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3430,
+      "velset": [
+        0.0,
+        0.0
+      ],
+      "hitdefs": [
+        {
+          "damage": 0,
+          "animtype": "Light",
+          "pausetime": [
+            0,
+            0
+          ],
+          "ground_slidetime": 5,
+          "ground_hittime": 15,
+          "ground_velocity": [
+            -4.0
+          ],
+          "air_velocity": [
+            -1.4,
+            -3.0
+          ]
+        }
+      ]
+    },
+    "3431": {
+      "type": "A",
+      "movetype": "A",
+      "physics": "S",
+      "anim": 3431
+    }
+  }
+}

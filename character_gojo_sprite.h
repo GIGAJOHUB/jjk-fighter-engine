@@ -21,14 +21,7 @@ void UnloadGojoSpritePack(void);
 bool GojoSpritePackReady(void);
 bool DrawGojoSprite(const Fighter* fighter, bool isP1, float introProgress,
                     bool domainCast, bool domainCounter);
-
-/* ────────────────────────────────────────────────────── */
-#ifdef CHARACTER_GOJO_SPRITE_IMPLEMENTATION
-
-#include "mugen_anim.h"
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
+const MACharacter* GetGojoChar(void);
 
 /* ── MUGEN Action IDs (mined from TND-Gojo.air) ── */
 enum {
@@ -78,10 +71,18 @@ enum {
     GA_KNOCKDOWN     = 5050,
 };
 
+/* ────────────────────────────────────────────────────── */
+#ifdef CHARACTER_GOJO_SPRITE_IMPLEMENTATION
+#include "mugen_anim.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+
 /* ── State ── */
 static MACharacter gGojoChar = {0};
-static MAPlayback  gGojoPlay[2] = {{0}, {0}};  /* P1 and P2 slots */
 static bool gGojoLoaded = false;
+
+const MACharacter* GetGojoChar(void) { return &gGojoChar; }
 
 /*
  * Scale: The MUGEN axis Y tells us how many pixels from the top of the sprite
@@ -103,8 +104,6 @@ void LoadGojoSpritePack(const char* folderPath) {
     gGojoLoaded = gGojoChar.ready;
 
     if (gGojoLoaded) {
-        MA_ForceAction(&gGojoPlay[0], &gGojoChar, GA_IDLE);
-        MA_ForceAction(&gGojoPlay[1], &gGojoChar, GA_IDLE);
         TraceLog(LOG_INFO, "GOJO: Ready — %d actions, %d offsets, sprites at %s",
                  gGojoChar.actionCount, gGojoChar.offsetCount, spritePath);
     } else {
@@ -114,7 +113,6 @@ void LoadGojoSpritePack(const char* folderPath) {
 
 void UnloadGojoSpritePack(void) {
     MA_Cleanup(&gGojoChar);
-    memset(gGojoPlay, 0, sizeof(gGojoPlay));
     gGojoLoaded = false;
 }
 
@@ -208,11 +206,17 @@ bool DrawGojoSprite(const Fighter* fighter, bool isP1,
 
     if (!gGojoLoaded || fighter->charData.id != CHAR_GOJO) return false;
 
-    int slot = isP1 ? 0 : 1;
-    MAPlayback* pb = &gGojoPlay[slot];
+    Fighter* f = (Fighter*)fighter; // Allow mutation of anim state for rendering
+    MAPlayback* pb = &f->anim;
 
     /* Pick and set animation */
     int wanted = GojoPickAction(fighter, introProgress, domainCast, domainCounter);
+    
+    /* If MUGEN state is active, it overrides the standard logic */
+    if (f->mugenState > 0) {
+        wanted = f->mugenState;
+    }
+
     MA_SetAction(pb, &gGojoChar, wanted);
     MA_Tick(pb, &gGojoChar);
 

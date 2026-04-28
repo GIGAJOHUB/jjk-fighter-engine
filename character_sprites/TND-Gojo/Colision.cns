@@ -1,0 +1,272 @@
+[StateDef 12000]
+type = S
+movetype= I
+physics = S
+juggle  = 1
+velset = 0,0
+ctrl = 0
+anim = cond(prevstateno=200,12000,12001)
+poweradd = 20
+sprpriority = 2
+
+[State 0, EnvShake]
+type = EnvShake
+trigger1 =time=0
+time = 10
+freq = 20
+ampl = -4
+phase = 90
+ignorehitpause =1
+persistent = 1
+
+[State 0, ChangeAnim]
+type = ChangeAnim
+trigger1 =prevstateno=240 && anim!=12400
+value = 12400
+ignorehitpause =1
+persistent =  1
+
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=animelem=1 && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=animelem=1 && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=animelem=1 && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+
+[State 0, Explod]
+type = Explod
+trigger1=animelem=1 && teamside=1
+anim =904
+ID = 904
+pos = 30,cond(anim=12000,-20,-25)
+postype= p1
+facing = 1
+vfacing = 1
+bindtime = -1
+vel = 0,0
+accel = 0,0
+random = 0,0
+removetime = -2
+pausemovetime = 0
+scale = .5,.5
+sprpriority = 99
+ontop = 0
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 1
+ignorehitpause=1
+[State 0, PosSet]
+type = PosSet
+trigger1=time=0 && teamside=1 && (prevstateno=200  || prevstateno=201 || prevstateno=240)
+x=target,pos x - 60*facing
+ignorehitpause =1
+persistent =1
+
+
+
+[State 0, ChangeState]
+type = Selfstate
+trigger1 =(command="a" ) && (prevstateno=240 || prevstateno=200 ) && time>3
+trigger2 =(ailevel>0 ) && (prevstateno=240 || prevstateno=200 ) && time>3
+value =201
+ctrl = 0
+ignorehitpause =1
+persistent =1
+
+[State 0, ChangeState]
+type = Selfstate
+trigger1 =(command="b" ) && (prevstateno=240 || prevstateno=200 ) && time>3
+value =201
+ctrl = 0
+ignorehitpause =1
+persistent =1
+
+[State 0, ChangeState]
+type = Selfstate
+trigger1 =(command="a" || command="b") && (prevstateno=201 && time>3)
+trigger2 =(ailevel>0) && (prevstateno=201 && time>3)
+value =202
+ctrl = 0
+ignorehitpause =1
+persistent =1
+
+
+[State 12000, end]
+type = selfstate
+trigger1 = time = 15
+value = 0
+ctrl = 1
+
+[StateDef 12001]
+type = S
+movetype= I
+physics = S
+juggle  = 1
+velset = 0,0
+ctrl = 0
+poweradd = 20
+sprpriority = 2
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=time=0  && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=time=0  && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=time=0 && teamside=1
+value = S2,15
+volume = 100
+channel = -1
+
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=pos y >=0
+trigger1=time=4 && teamside=1
+value = S201,0
+volume = 100
+channel = -1
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=pos y >=0
+trigger1=time=4 && teamside=1
+value = S201,0
+volume = 100
+channel = -1
+[State 0, PlaySnd]
+type = PlaySnd
+trigger1=pos y >=0
+trigger1=time=4 && teamside=1
+value = S201,0
+volume = 100
+channel = -1
+[State 0, ChangeAnim]
+type = ChangeAnim
+trigger1 =time=4
+value = cond(pos y >=0,101,41)
+ignorehitpause = 1
+persistent =1
+
+[State 0, PosSet]
+type = PosSet
+trigger1=time=0 && teamside=1
+x=target,pos x - 60*facing
+ignorehitpause =1
+persistent =1
+
+[State 0, Explod]
+type = Explod
+trigger1=time=0 && teamside=1
+anim =904
+ID = 904
+pos = 30,-25
+postype= p1
+facing = 1
+vfacing = 1
+bindtime = 1
+vel = 0,0
+accel = 0,0
+random = 0,0
+removetime = -2
+pausemovetime = 0
+scale = .7,.7
+sprpriority = 99
+ontop = 0
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 1
+ignorehitpause=1
+
+[State 0, Explod]
+type = Explod
+trigger1=pos y >=0
+trigger1=time=1
+anim = 7020
+ID = 7020
+pos = 30,-10
+postype = p1
+facing = 1
+vfacing = 1
+bindtime = 1
+vel = 1,0
+accel = 0,0
+random = 15,5
+removetime = -2
+pausemovetime = 0
+scale = .4,.4
+sprpriority = 99
+ontop = 0
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+ignorehitpause =1
+trans = addalpha
+alpha=150,256
+persistent =1
+supermove
+pausemove
+
+[State 0, Explod]
+type = Explod
+trigger1= gametime%4=1
+trigger1=pos y >=0
+anim = 7010
+ID = 7010
+pos = 10,-6
+postype = p1
+facing = -1
+vfacing = 1
+bindtime = 1
+vel = 0,0
+accel = 0,0
+random = 0,0
+removetime = -2
+pausemovetime = 0
+scale = .3,.3
+sprpriority = 99
+ontop = 0
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+ignorehitpause =1
+trans = addalpha
+alpha=90,256
+persistent =1
+supermove
+pausemove
+
+[State 0, VelSet]
+type = VelSet
+trigger1 =time=4
+x = -10
+y = 0
+ignorehitpause =1
+persistent = 1
+
+
+[State 12001, end]
+type = selfstate
+trigger1 = time = 17
+value =cond(pos y >=0,52,50)
+ctrl = 1
+

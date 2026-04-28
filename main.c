@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#define MUGEN_CHAR_IMPLEMENTATION
+#include "mugen_char.h"
 
 #define SCREEN_W                 960
 #define SCREEN_H                 540
@@ -35,6 +37,8 @@ static Sound gSfxRound2;
 static Sound gSfxRound3;
 static Sound gSfxFight;
 static bool gRoundsLoaded = false;
+
+static MugenCharData gGojoCharData = {0};
 
 #define HITSTOP_LIGHT            2
 #define DODGE_INVUL_FRAMES       8
@@ -90,6 +94,9 @@ static Font gRetroFont = {0};
 static bool gRetroFontLoaded = false;
 static Projectile gProjectiles[MAX_PROJECTILES] = {0};
 static int gHitstopFrames = 0;
+
+static void SetMugenState(Fighter* f, int stateId);
+static void LoadGojoSounds(Fighter* f);
 
 typedef enum {
     STATE_INTRO = 0,
@@ -160,6 +167,7 @@ typedef struct {
     int roundNumber;
     int p1Wins;
     int p2Wins;
+    int lastPlayedRound;
     float roundTimer;
     float introTimer;
     float endTimer;
@@ -361,17 +369,17 @@ static const char* KeyLabel(int key) {
 static void SetDefaultControls(void) {
     gControls[0].keys[ACT_LEFT] = KEY_A;
     gControls[0].keys[ACT_RIGHT] = KEY_D;
-    gControls[0].keys[ACT_JUMP] = KEY_SPACE;
-    gControls[0].keys[ACT_CROUCH] = KEY_LEFT_SHIFT;
+    gControls[0].keys[ACT_JUMP] = KEY_W;
+    gControls[0].keys[ACT_CROUCH] = KEY_S;
     gControls[0].keys[ACT_ATTACK] = BIND_MOUSE_LEFT;
     gControls[0].keys[ACT_BLOCK] = BIND_MOUSE_RIGHT;
     gControls[0].keys[ACT_TOOL1] = KEY_ONE;
-    gControls[0].keys[ACT_RCT] = KEY_R;
+    gControls[0].keys[ACT_RCT] = KEY_E;
     gControls[0].keys[ACT_DOMAIN] = KEY_S;
     gControls[0].keys[ACT_DASH] = KEY_Q;
-    gControls[0].keys[ACT_ABILITY1] = KEY_ONE;
-    gControls[0].keys[ACT_ABILITY2] = KEY_TWO;
-    gControls[0].keys[ACT_ABILITY3] = KEY_THREE;
+    gControls[0].keys[ACT_ABILITY1] = KEY_B;
+    gControls[0].keys[ACT_ABILITY2] = KEY_R;
+    gControls[0].keys[ACT_ABILITY3] = KEY_T;
     gControls[0].keys[ACT_ULT] = KEY_X;
 
     gControls[1].keys[ACT_LEFT] = KEY_LEFT;
@@ -506,13 +514,41 @@ static Fighter InitFighter(CharacterID id, float startX, int facingDir) {
     f.mahoragaMaxHP        = f.maxHP;
     f.mahoragaHP           = f.maxHP;
     f.prevX                = startX;
+
+    if (id == CHAR_GOJO) {
+        f.hitbox = (Rectangle){ startX, FLOOR_Y - 180.0f, 100.0f, 180.0f };
+        f.hurtbox = f.hitbox;
+        f.pushbox = f.hitbox;
+        f.mugenState = 0;
+        f.mugenStateTime = 0;
+        f.mugenCtrl = true;
+        memset(&f.anim, 0, sizeof(MAPlayback));
+        LoadGojoSounds(&f);
+        SetMugenState(&f, 190); // Intro
+    }
+
     return f;
 }
+
+/* ═══════════════════════════════════════════════════════════
+ *  UTILITIES & HELPERS
+ * ═══════════════════════════════════════════════════════════ */
 
 static void TriggerVisualEvent(Fighter* f, FighterVisualEvent event, float duration) {
     f->visualEvent = event;
     f->visualEventTimer = duration;
     f->visualEventDuration = duration;
+}
+
+static bool MatchCommand(const Fighter* f, const char* pattern) {
+    int curIdx = f->inputBufferIdx;
+    const InputFrame* cur = &f->inputBuffer[curIdx];
+    if (strcmp(pattern, "a") == 0) return (cur->buttons & 1);
+    if (strcmp(pattern, "y") == 0) return (cur->buttons & 16);
+    if (strcmp(pattern, "z") == 0) return (cur->buttons & 32);
+    if (strcmp(pattern, "t") == 0) return (cur->buttons & 64);
+    if (strcmp(pattern, "d") == 0) return (cur->buttons & 128);
+    return false;
 }
 
 static void UpdateFighterBoxes(Fighter* f) {
@@ -1056,6 +1092,238 @@ static void DoMeleeHit(Fighter* attacker, Fighter* target) {
                            PARTICLE_HIT_BURST, blackFlashProc ? 20 : 10, false, 0)) {
             RegisterYujiCombo(attacker);
         }
+    }
+}
+/* Helper: play Gojo sound by slot index */
+static void PlayGojoSfx(Fighter* f, int slot) {
+    if (slot >= 0 && slot < f->mugenSfx.count && f->mugenSfx.loaded[slot]) {
+        PlaySound(f->mugenSfx.sfx[slot]);
+    }
+}
+
+static void LoadGojoSounds(Fighter* f) {
+    f->mugenSfx.count = 16;
+    for (int i = 0; i < 16; i++) {
+        char path[128];
+        snprintf(path, sizeof(path), "assets/sounds/gojo/s%02d.wav", i);
+        if (FileExists(path)) {
+            f->mugenSfx.sfx[i] = LoadSound(path);
+            f->mugenSfx.loaded[i] = true;
+        }
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ *  MUGEN INPUT & COMMAND SYSTEM
+ * ═══════════════════════════════════════════════════════════ */
+
+static void UpdateInputBuffer(Fighter* f, const NetInput* netInput) {
+    InputFrame* frame = &f->inputBuffer[f->inputBufferIdx];
+    memset(frame, 0, sizeof(InputFrame));
+    
+    int x = 0, y = 0;
+    if (netInput->left) x = -1;
+    if (netInput->right) x = 1;
+    if (netInput->jump) y = -1;
+    if (netInput->crouch) y = 1;
+    
+    if (x == 0 && y == 0) frame->dir = 5;
+    else if (x == 0 && y < 0) frame->dir = 8;
+    else if (x == 0 && y > 0) frame->dir = 2;
+    else if (x > 0 && y == 0) frame->dir = 6;
+    else if (x < 0 && y == 0) frame->dir = 4;
+    else if (x > 0 && y < 0) frame->dir = 9;
+    else if (x < 0 && y < 0) frame->dir = 7;
+    else if (x > 0 && y > 0) frame->dir = 3;
+    else if (x < 0 && y > 0) frame->dir = 1;
+    
+    if (netInput->attack)   frame->buttons |= 1;  // A
+    if (netInput->abilityE)  frame->buttons |= 16; // Y
+    if (netInput->abilityR)  frame->buttons |= 32; // Z
+    if (netInput->ult)       frame->buttons |= 8;  // X
+    if (netInput->abilityF)  frame->buttons |= 64; // S
+    
+    f->inputBufferIdx = (f->inputBufferIdx + 1) % INPUT_BUFFER_SIZE;
+}
+
+/* The CORE state setter. */
+static void SetMugenState(Fighter* f, int stateId) {
+    if (f->mugenState == stateId && stateId != 200) return; 
+    
+    f->mugenState = stateId;
+    f->mugenStateTime = 0;
+    f->mugenHitApplied = false;
+    
+    const MCState* ms = MC_FindState(&gGojoCharData, stateId);
+    int animId = ms ? ms->anim : stateId;
+    if (ms && ms->ctrl >= 0) f->mugenCtrl = (ms->ctrl == 1);
+    else f->mugenCtrl = true;
+    MA_SetAction(&f->anim, GetGojoChar(), animId);
+    
+    /* Audio Cues */
+    if (stateId == 200) { PlayGojoSfx(f, 0); TraceLog(LOG_INFO, "[SND] Playing s03.wav for state 200"); }
+    if (stateId == 3000) { PlayGojoSfx(f, 3); TraceLog(LOG_INFO, "[SND] Playing red.wav for state 3000"); }
+    if (stateId == 3100) { PlayGojoSfx(f, 1); TraceLog(LOG_INFO, "[SND] Playing blue.wav for state 3100"); }
+    if (stateId == 3300) { PlayGojoSfx(f, 4); TraceLog(LOG_INFO, "[SND] Playing domain.wav for state 3300"); }
+    if (stateId == 100) { PlayGojoSfx(f, 2); TraceLog(LOG_INFO, "[SND] Playing dash.wav for state 100"); }
+    
+    TraceLog(LOG_DEBUG, "MUGEN: State -> %d", stateId);
+}
+
+/* Update MUGEN state machine each frame */
+static void UpdateMugenState(Fighter* f, Fighter* opponent, bool isP1) {
+    if (!gGojoCharData.ready || !GojoSpritePackReady()) return;
+    
+    MA_Tick(&f->anim, GetGojoChar());
+    f->mugenStateTime++;
+    
+    /* Simple physics integration */
+    if (f->mugenState == 20) f->hitbox.x += 3.5f * (float)f->facingDir;
+    if (f->mugenState == 21) f->hitbox.x -= 2.5f * (float)f->facingDir;
+    if (f->mugenState == 100) f->hitbox.x += 9.0f * (float)f->facingDir;
+
+    /* HIT SYSTEM */
+    if (!f->mugenHitApplied && f->mugenState != 0 && f->mugenState != 20 && f->mugenState != 21) {
+        if (f->anim.actionIndex >= 0) {
+            const MAAction* act = &GetGojoChar()->actions[f->anim.actionIndex];
+            if (f->anim.currentFrame < act->frameCount) {
+                const MAFrame* frame = &act->frames[f->anim.currentFrame];
+                if (frame->hitboxCount > 0) {
+                    bool hitLanded = false;
+                    Rectangle oppBox = opponent->hitbox; // Default hurtbox
+                    
+                    for (int i = 0; i < frame->hitboxCount; i++) {
+                        MABox clsn = frame->hitboxes[i];
+                        float scale = 1.0f; // Scale if needed
+                        float bw = (clsn.x2 - clsn.x1) * scale;
+                        float bh = (clsn.y2 - clsn.y1) * scale;
+                        float bx = f->hitbox.x + (f->hitbox.width / 2.0f) + clsn.x1 * scale * (float)f->facingDir;
+                        if (f->facingDir == -1) bx = f->hitbox.x + (f->hitbox.width / 2.0f) - clsn.x2 * scale; // Adjust for flip
+                        float by = f->hitbox.y + f->hitbox.height + clsn.y1 * scale; // Assuming y=0 is feet
+                        Rectangle worldBox = { bx, by, bw, bh };
+
+                        if (CheckCollisionRecs(worldBox, oppBox)) {
+                            hitLanded = true;
+                            break;
+                        }
+                    }
+
+                    if (hitLanded) {
+                        f->mugenHitApplied = true;
+                        int damage = 20; // Default MUGEN damage if not specified
+                        if (opponent->isBlocking) {
+                            opponent->blockHits++;
+                            if (opponent->blockHits >= 3) {
+                                opponent->isBlocking = false;
+                                opponent->hitStunFrames = 60;
+                                opponent->hp -= damage * 1.5f; // Guard break penalty
+                                TraceLog(LOG_INFO, "[MUGEN] GUARD BREAK! target hit.");
+                            } else {
+                                opponent->hp -= damage * 0.1f;
+                            }
+                        } else {
+                            opponent->hp -= damage;
+                            opponent->hitStunFrames = 30;
+                            opponent->hitbox.x += 10.0f * (float)f->facingDir;
+                            TraceLog(LOG_INFO, "[MUGEN] HIT state=%d frame=%d damage=%d", f->mugenState, f->anim.currentFrame, damage);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* Infinity Passive Drain */
+    if (f->mugenState == 3400) {
+        f->cursedEnergy -= 0.15f;
+        if (f->cursedEnergy <= 0) {
+            f->cursedEnergy = 0;
+            SetMugenState(f, 0);
+        }
+    }
+
+    /* Transition back to idle if animation finishes */
+    if (f->anim.finished) {
+        if (f->mugenState != 0 && f->mugenState != 20 && f->mugenState != 21 && f->mugenState != 11 && f->mugenState != 3400) {
+            SetMugenState(f, 0);
+        }
+    }
+}
+
+/* MUGEN Command Interpreter (DIRECT KEY MAPPING) */
+static void CheckMugenCommands(Fighter* f, Fighter* opponent, bool isP1, bool isLocal, const NetInput* netInput) {
+    if (f->charData.id != CHAR_GOJO) return;
+    
+    int profile = isP1 ? 0 : 1;
+    bool pressedLeft  = isLocal ? IsKeyDown(gControls[profile].keys[ACT_LEFT])  : netInput->left;
+    bool pressedRight = isLocal ? IsKeyDown(gControls[profile].keys[ACT_RIGHT]) : netInput->right;
+    bool pressedDown  = isLocal ? IsKeyDown(gControls[profile].keys[ACT_CROUCH]) : netInput->crouch;
+    bool pressedJump  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_JUMP]) : netInput->jump;
+    
+    bool pressedAtk   = isLocal ? BindingPressed(gControls[profile].keys[ACT_ATTACK]) : netInput->attack;
+    bool pressedBlock = isLocal ? BindingDown(gControls[profile].keys[ACT_BLOCK]) : netInput->block;
+    bool pressedDash  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_DASH]) : netInput->dodge;
+    
+    bool pressedAb1   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY1]) : netInput->abilityE;
+    bool pressedAb2   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY2]) : netInput->abilityR;
+    bool pressedTele  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY3]) : netInput->abilityF;
+    bool pressedRCT   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_RCT])      : netInput->rct;
+    bool pressedDom   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ULT])      : netInput->ult;
+    bool pressedInf   = isLocal ? IsKeyPressed(KEY_ONE)                               : (netInput->ceAttack); 
+
+    /* State Overrides */
+    f->isBlocking = pressedBlock && f->onGround;
+    if (f->isBlocking) TraceLog(LOG_INFO, "[INPUT] RightClick -> Block");
+    else f->blockHits = 0;
+    f->isCrouching = pressedDown;
+
+    /* Movement & Actions (Unrestricted by mugenCtrl per instructions) */
+    if (pressedAtk) {
+        TraceLog(LOG_INFO, "[INPUT] LeftClick -> State 200");
+        SetMugenState(f, 200);
+    } else if (pressedAb1) {
+        TraceLog(LOG_INFO, "[INPUT] B -> State 3100 (Blue)");
+        SetMugenState(f, 3100);
+        f->lastSpecialState = 3100;
+        f->specialBufferTimer = 1.2f;
+    } else if (pressedAb2) {
+        if (f->lastSpecialState == 3100 && f->specialBufferTimer > 0) {
+            TraceLog(LOG_INFO, "[INPUT] R (Combo) -> State 3310 (Purple)");
+            SetMugenState(f, 3310); // Purple
+            f->lastSpecialState = 0;
+        } else {
+            TraceLog(LOG_INFO, "[INPUT] R -> State 3000 (Red)");
+            SetMugenState(f, 3000); // Red
+            f->lastSpecialState = 3000;
+            f->specialBufferTimer = 1.0f;
+        }
+    } else if (pressedTele) {
+        TraceLog(LOG_INFO, "[INPUT] T -> State 100 (Teleport)");
+        f->hitbox.x = opponent->hitbox.x - (float)opponent->facingDir * 80.0f;
+        SetMugenState(f, 100); 
+    } else if (pressedDom) {
+        TraceLog(LOG_INFO, "[INPUT] X -> State 3300 (Domain)");
+        SetMugenState(f, 3300);
+    } else if (pressedInf) {
+        if (f->mugenState != 3400) {
+            TraceLog(LOG_INFO, "[INPUT] 1 -> State 3400 (Infinity)");
+            SetMugenState(f, 3400);
+        } else SetMugenState(f, 0);
+    } else if (pressedDash) {
+        TraceLog(LOG_INFO, "[INPUT] Q -> State 100 (Dash)");
+        SetMugenState(f, 100);
+    } else if (pressedJump && f->onGround) {
+        f->velY = JUMP_FORCE;
+        f->onGround = false;
+        SetMugenState(f, 40);
+    } else if (pressedRight) {
+        f->facingDir = 1;
+        if (f->mugenState != 20) SetMugenState(f, 20);
+    } else if (pressedLeft) {
+        f->facingDir = -1;
+        if (f->mugenState != 21) SetMugenState(f, 21);
+    } else if (f->onGround && f->mugenState != 0 && f->mugenState != 11 && !pressedLeft && !pressedRight) {
+        SetMugenState(f, 0);
     }
 }
 
@@ -1890,7 +2158,19 @@ static NetInput BuildCpuInput(const Fighter* cpu, const Fighter* player, CpuDiff
     if (lowHealth && cpu->cursedEnergy >= CalcRCTCost(cpu) && gap > 150.0f) input.rct = true;
     if (canDomainCounter && cpu->hasDomain && cpu->cursedEnergy >= cpu->maxCE * DOMAIN_CE_COST) input.domain = true;
     if (state == STATE_BATTLE && fullCe && gap > 120.0f && cpu->hasDomain && aggro > 0.65f) input.domain = true;
-    if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.abilityF = true;
+    if (cpu->charData.id == CHAR_GOJO && !cpu->infinityActive && cpu->cursedEnergy > 40.0f && gap < 120.0f) input.ceAttack = true;
+
+    if (cpu->charData.id == CHAR_GOJO && moveDecision < 60) {
+        if (gap > 250.0f && cpu->cursedEnergy >= 20.0f) {
+            input.abilityR = true; // Red
+        } else if (gap > 150.0f && cpu->cursedEnergy >= 20.0f) {
+            input.abilityE = true; // Blue
+        } else if (gap < 60.0f) {
+            input.attack = true; // 200
+        } else if (moveDecision < 20) {
+            input.abilityF = true; // Teleport
+        }
+    }
 
     if (!cpu->ultUsed) {
         switch (cpu->charData.id) {
@@ -2233,6 +2513,13 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
                          DomainClashState* clash) {
     bool actuallyStunned = (stunLock && !f->isHeavenlyRestricted) || f->hitStunFrames > 0;
     int playerId = isP1 ? 1 : 2;
+
+    if (f->charData.id == CHAR_GOJO) {
+        if (actuallyStunned || f->isKnockedDown) return;
+        CheckMugenCommands(f, opponent, isP1, true, NULL);
+        return;
+    }
+
     int profile   = isP1 ? 0 : 1;
     int leftKey   = gControls[profile].keys[ACT_LEFT];
     int rightKey  = gControls[profile].keys[ACT_RIGHT];
@@ -2318,7 +2605,6 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
     }
 
     if (BindingPressed(atkKey) && !f->isAttacking && !f->ultActive) {
-        bool forceMelee = true;
         f->isAttacking  = true;
         f->attackFrames = 14;
         f->attackLanded = false;
@@ -2326,7 +2612,6 @@ static void ProcessInput(Fighter* f, Fighter* opponent, bool stunLock, bool isP1
         if (!f->onGround) {
             f->attackFrames = 12;
         }
-        (void)forceMelee;
         DoMeleeHit(f, opponent);
     }
 
@@ -2364,6 +2649,13 @@ static void ProcessNetworkInput(Fighter* f, Fighter* opponent, bool stunLock, bo
                                 int* domainCasterPlayer, float* domainTimer, DomainClashState* clash) {
     bool actuallyStunned = (stunLock && !f->isHeavenlyRestricted) || f->hitStunFrames > 0;
     int playerId = isP1 ? 1 : 2;
+
+    if (f->charData.id == CHAR_GOJO) {
+        if (actuallyStunned || f->isKnockedDown) return;
+        CheckMugenCommands(f, opponent, isP1, false, input);
+        return;
+    }
+
     float spd = f->speed;
     bool wasCrouching = f->isCrouching;
     bool pressedDomain = input->domain && !prevInput->domain;
@@ -2518,6 +2810,7 @@ static void StartNextRound(RoundState* round, Fighter* p1, Fighter* p2,
     round->countdownTimer = 3.0f;
     round->fightBannerTimer = 0.0f;
     round->countdownDone = false;
+    round->lastPlayedRound = -1;
     snprintf(round->bannerText, sizeof(round->bannerText), "ROUND %d", round->roundNumber);
     snprintf(round->subText, sizeof(round->subText), "FIGHT");
 }
@@ -2553,12 +2846,11 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
 
     /* 3-second ROUND text then FIGHT! with SFX */
     if (!round->countdownDone) {
-        static int lastPlayedRound = -1;
-        if (round->countdownTimer > 2.85f && lastPlayedRound != round->roundNumber) {
+        if (round->countdownTimer > 2.85f && round->lastPlayedRound != round->roundNumber) {
             if (round->roundNumber == 1) PlaySound(gSfxRound1);
             else if (round->roundNumber == 2) PlaySound(gSfxRound2);
             else PlaySound(gSfxRound3);
-            lastPlayedRound = round->roundNumber;
+            round->lastPlayedRound = round->roundNumber;
         }
 
         if (round->countdownTimer > 0.0f) {
@@ -2578,7 +2870,7 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
             round->countdownDone = true;
             round->bannerText[0] = '\0';
             round->subText[0] = '\0';
-            lastPlayedRound = -1;
+            round->lastPlayedRound = -1;
         }
         if (round->countdownTimer > 0.0f) canAct = false;
         round->introTimer = 0.0f;
@@ -2633,13 +2925,23 @@ static void SimulateBattleFrame(Fighter* p1, Fighter* p2, GameState* state, int*
     if (canAct) {
         if (cpuMode && p1Input != NULL && p1Prev != NULL && cpuPrevInput != NULL) {
             NetInput cpuInput = BuildCpuInput(p2, p1, cpuDifficulty, *state, *domainCasterPlayer, *domainTimer);
+            UpdateInputBuffer(p1, p1Input);
+            UpdateInputBuffer(p2, &cpuInput);
+            if (p1->charData.id == CHAR_GOJO) UpdateMugenState(p1, p2, true);
+            if (p2->charData.id == CHAR_GOJO) UpdateMugenState(p2, p1, false);
             ProcessNetworkInput(p1, p2, p1Stun, true, p1Input, p1Prev, state, domainCasterPlayer, domainTimer, clash);
             ProcessNetworkInput(p2, p1, p2Stun, false, &cpuInput, cpuPrevInput, state, domainCasterPlayer, domainTimer, clash);
             *cpuPrevInput = cpuInput;
         } else if (p1Input != NULL && p1Prev != NULL && p2Input != NULL && p2Prev != NULL) {
+            UpdateInputBuffer(p1, p1Input);
+            UpdateInputBuffer(p2, p2Input);
+            if (p1->charData.id == CHAR_GOJO) UpdateMugenState(p1, p2, true);
+            if (p2->charData.id == CHAR_GOJO) UpdateMugenState(p2, p1, false);
             ProcessNetworkInput(p1, p2, p1Stun, true, p1Input, p1Prev, state, domainCasterPlayer, domainTimer, clash);
             ProcessNetworkInput(p2, p1, p2Stun, false, p2Input, p2Prev, state, domainCasterPlayer, domainTimer, clash);
         } else {
+            // Local fallback logic would go here if needed, 
+            // but the game primarily uses the paths above.
             ProcessInput(p1, p2, p1Stun, true, state, domainCasterPlayer, domainTimer, clash);
             ProcessInput(p2, p1, p2Stun, false, state, domainCasterPlayer, domainTimer, clash);
         }
@@ -3159,6 +3461,7 @@ int main(int argc, char** argv) {
     }
     SetGojoPortrait(gojoPortrait, gojoPortraitLoaded);
     LoadGojoSpritePack("assets/characters/gojo/sprites");
+    MC_Load(&gGojoCharData, "assets/characters/gojo/chardata.json");
     LoadSukunaSpritePack("assets/sprites/meguna_v5");
     LoadSukunaSfx("assets/sounds/meguna_v5");
     LoadYujiSpritePack("assets/sprites/yuji_s1");
@@ -3205,6 +3508,7 @@ int main(int argc, char** argv) {
             musicLoaded = true;
         }
         prevState = state;
+        if (musicLoaded) UpdateMusicStream(bgm);
 
 
         if (state == STATE_INTRO) {
@@ -3264,7 +3568,6 @@ int main(int argc, char** argv) {
                 musicLoaded = true;
             }
             EndDrawing();
-            continue;
         }
 
         if (musicLoaded) {

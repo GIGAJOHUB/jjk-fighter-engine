@@ -1,0 +1,21 @@
+[Info]
+name="TND-Gojo"
+displayname="Gojo"
+versiondate=
+mugenversion=1.1
+author="Edit By Mugen_Labs & Resprite Edit By Mugen Sukuna"
+pal.defaults=1,2,3,4,5
+[Files]
+sprite=TND-Gojo.sff
+sound=Sonido.snd
+anim=TND-Gojo.air
+cmd=TND-Gojo.cmd
+cns=TND-Gojo.cns
+st=TND-Gojo.cns
+stcommon=common1.cns
+pal1=paleta.act
+st1=E6F.cns
+st2=Helpers.cns
+[Arcade]
+intro.storyboard=
+ending.storyboard=

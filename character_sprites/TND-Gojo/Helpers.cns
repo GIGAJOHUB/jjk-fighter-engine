@@ -1,0 +1,1597 @@
+[StateDef 6000]
+type = S
+movetype = I
+juggle = 0
+anim = 1
+;Null azul
+[State 0, Null]
+type = Null
+triggerall=numhelper(3110)
+trigger1 = var(15):=cond(floor(helper(3110),fvar(8)/10)>9,0,floor(helper(3110),fvar(8)/10))
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=numhelper(3110)
+trigger1=var(16):=floor(helper(3110),fvar(8))%10
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=numhelper(3110)
+trigger1 = var(17):=floor(helper(3110),fvar(8))/100
+ignorehitpause = 1
+persistent =1 
+;Null rojo
+[State 0, Null]
+type = Null
+triggerall=numhelper(3002)
+trigger1=var(19):=floor(helper(3002),fvar(8))%10
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=numhelper(3002)
+trigger1 = var(18):=cond(floor(helper(3002),fvar(8)/10)>9,0,floor(helper(3002),fvar(8)/10))
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=numhelper(3002)
+trigger1 = var(20):=floor(helper(3002),fvar(8))/100
+ignorehitpause = 1
+persistent =1 
+;Null de posicion
+[State 0, Null]
+type = Null
+triggerall=numhelper(3110) 
+trigger1=(root,stateno!=3100 && root,stateno!=3101) && var(12)>=20
+trigger1=var(10):=cond(var(10)>0,var(10)-2,0)
+trigger2=root,stateno!=3100 && root,stateno!=3101 &&  var(12)<20
+trigger2=var(12):=cond(var(12)<20,var(12)+1,0)
+trigger3=root,stateno=3100
+trigger3=var(10):=cond((var(10)>=0 && var(10)<50),var(10)+3,50)
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=numhelper(3002) 
+trigger1=(root,stateno!=3000 && root,stateno!=3005) && var(13)>=20
+trigger1=var(11):=cond(var(11)>0,var(11)-2,0)
+trigger2=root,stateno!=3000 && root,stateno!=3005 &&  var(13)<20
+trigger2=var(13):=cond(var(13)<20,var(13)+1,0)
+trigger3=root,stateno=3000
+trigger3=var(11):=cond((var(11)>=0 && var(11)<50),var(11)+3,50)
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=!numhelper(3110) 
+trigger1=var(10):=0
+trigger2=var(12):=0
+ignorehitpause = 1
+persistent =1 
+[State 0, Null]
+type = Null
+triggerall=!numhelper(3002) 
+trigger1=var(11):=0
+trigger2=var(13):=0
+ignorehitpause = 1
+persistent =1 
+;Numeros p1 azul
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(231)<2
+anim =230+var(16)
+ID = 231
+pos = -36+var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(230)<2 
+anim =230+var(15)
+ID = 230
+pos = -42+var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(10)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(232)<2
+anim =231+var(17)
+ID = 232
+pos = -47+var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+;Numeros rojo
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(2311)<2
+anim =230+var(19)
+ID = 2311
+pos = -36+var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+remappal=230,1
+trans=none
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(2300)<2 
+anim =230+var(18)
+ID = 2300
+pos = -42+var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+remappal=230,1
+ontop = 1
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(11)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(2322)<2
+anim =231+var(20)
+ID = 2322
+pos = -47+var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+
+[State 0, Explod]
+type = Explod
+triggerall= var(11)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(2399)<2
+anim =2399
+ID = 2399
+pos = -29+var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(10)>0
+trigger1=teamside=1 && root,ID=56 && numexplod(2398)<2
+anim =2399
+ID = 2398
+pos = -29+var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+persistent=1
+
+;;Numeros p3 
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(231)<2
+anim =230+var(16)
+ID = 231
+pos = -36+var(10),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(230)<2 
+anim =230+var(15)
+ID = 230
+pos = -42+var(10),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(10)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(232)<2
+anim =231+var(17)
+ID = 232
+pos = -47+var(10),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+;Numeros rojo
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(2311)<2
+anim =230+var(19)
+ID = 2311
+pos = -36+var(11),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+remappal=230,1
+trans=none
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(2300)<2 
+anim =230+var(18)
+ID = 2300
+pos = -42+var(11),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+remappal=230,1
+ontop = 1
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(11)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(2322)<2
+anim =231+var(20)
+ID = 2322
+pos = -47+var(11),screenheight-16
+Space = Screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(11)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(2399)<2
+anim =2399
+ID = 2399
+pos = -29+var(11),screenheight-16
+space = screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall= var(10)>0
+trigger1= root,teammode=simul  && root,ID=57 && teamside=1 && numexplod(2398)<2
+anim =2399
+ID = 2398
+pos = -29+var(10),screenheight-16
+space = screen
+bindtime = -1
+removetime = 2
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+persistent=1
+;Numeros p2
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(231)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =230+var(16)
+ID = 231
+pos = screenwidth+36-var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(230)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =230+var(15)
+ID = 230
+pos = screenwidth+30-var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(232)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =231+var(17)
+ID = 232
+pos = screenwidth+25-var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+;Numeros rojo
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2311)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =230+var(19)
+ID = 2311
+pos = screenwidth+36-var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+remappal=230,1
+trans=none
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2300)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =230+var(18)
+ID = 2300
+pos = screenwidth+30-var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+remappal=230,1
+ontop = 1
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2322)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =231+var(20)
+ID = 2322
+pos = screenwidth+25-var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2399)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =2399
+ID = 2399
+pos = screenwidth+43-var(11),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(2398)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 57
+trigger2= root,teammode=simul && enemy,teammode=simul  && root,ID = 58
+trigger3=root,teammode=single && enemy,teammode=simul && root,id=58
+trigger4=root,teammode=single && enemy,teammode=single && root,id=57
+anim =2399
+ID = 2398
+pos = screenwidth+43-var(10),screenheight-7
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+persistent=1
+
+;P4
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(231)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =230+var(16)
+ID = 231
+pos = screenwidth+36-var(10),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(230)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =230+var(15)
+ID = 230
+pos = screenwidth+30-var(10),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(232)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =231+var(17)
+ID = 232
+pos = screenwidth+25-var(10),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+trans=none
+sprpriority = 0
+ontop = 1
+shadow = 0,0,0
+ownpal = 1
+removeongethit = 0
+;Numeros rojo
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2311)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =230+var(19)
+ID = 2311
+pos = screenwidth+36-var(11),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+remappal=230,1
+trans=none
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2300)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =230+var(18)
+ID = 2300
+pos = screenwidth+30-var(11),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+vel=0,0
+sprpriority = 0
+remappal=230,1
+ontop = 1
+ownpal = 1
+trans=none
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2322)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =231+var(20)
+ID = 2322
+pos = screenwidth+25-var(11),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(11)>0 && numexplod(2399)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =2399
+ID = 2399
+pos = screenwidth+43-var(11),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+remappal=230,1
+removeongethit = 0
+persistent=1
+[State 0, Explod]
+type = Explod
+triggerall=var(10)>0 && numexplod(2398)<2 && teamside=2
+trigger1= root,teammode=simul && enemy,teammode=single &&root, ID = 58
+trigger2=root, teammode=simul && enemy,teammode=simul  &&root, ID = 59
+anim =2399
+ID = 2398
+pos = screenwidth+43-var(10),screenheight-16
+space = screen
+bindtime = -1
+removetime = 1
+pausemovetime = 0
+scale = 1,1
+sprpriority = 0
+ontop = 1
+ownpal = 1
+removeongethit = 0
+persistent=1
+
+;Barra test
+[State 0, Null]
+type = Null
+trigger1=fvar(6):=cond(fvar(6)<=0,0,fvar(6))
+ignorehitpause = 1
+persistent = 1
+
+[State 0, Null]
+type = Null
+trigger1=fvar(6):=cond(fvar(6)>=500,500,fvar(6)+root,fvar(9)*55)
+ignorehitpause = 1
+persistent = 1
+[State 0, Null]
+type = Null
+trigger1=fvar(8):=cond(fvar(8)>=fvar(6),fvar(6),fvar(8)+4)	
+ignorehitpause = 1
+persistent = 1
+
+[State 0, Null]
+type = Null
+trigger1=fvar(6)>=500
+trigger1=fvar(7):=1
+trigger2=fvar(6)<500
+trigger2=fvar(7):=0
+ignorehitpause = 1
+persistent = 1
+
+[State 0, Null]
+type = Null
+trigger1 =fvar(6)!=fvar(8) || fvar(7) || numhelper(3410) || root,stateno=200
+trigger1=fvar(1):=1 
+trigger2 =fvar(6)=fvar(8) && !fvar(7)&& !numhelper(3410)
+trigger2=fvar(1):=0
+ignorehitpause = 1
+persistent = 1
+[State 0, Null]
+type = Null
+trigger1=fvar(3)
+trigger1=fvar(2):=cond(fvar(2)>=9,9,fvar(2)+1)
+trigger2=!fvar(3)
+trigger2=fvar(2):=cond(fvar(2)<=0,0,fvar(2)-.5)
+ignorehitpause = 1
+persistent = 1
+[State 0, Null]
+type = Null
+trigger1=fvar(1)
+trigger1=fvar(3):=80
+trigger2=!fvar(1)
+trigger2=fvar(3):=cond(fvar(3)<=0,0,fvar(3)-1)
+ignorehitpause = 1
+persistent = 1
+;Explods del p1
+[State 0, Explod Del P1]
+type = Explod
+trigger1 =numexplod(6001)<2
+anim = 6001
+ID = 6001
+pos = -5+fvar(2), ScreenHeight-15
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.37
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(6002)<2
+anim = 6002
+ID = 6002
+pos = -5+fvar(2), ScreenHeight-16
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+;Cuadro brillante
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(6004)<2 && fvar(8)>=100
+anim = 6004
+ID = 6004
+pos = -5+fvar(2), ScreenHeight-16
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60044)<2 && fvar(8)>=200
+anim = 6004
+ID = 60044
+pos = -5+fvar(2), ScreenHeight-25
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60045)<2 && fvar(8)>=300
+anim = 6004
+ID = 60045
+pos = -5+fvar(2), ScreenHeight-33
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60046)<2 && fvar(8)>=400
+anim = 6004
+ID = 60046
+pos = -5+fvar(2), ScreenHeight-43
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60047)<2 && fvar(8)>=500
+anim = 6004
+ID = 60047
+pos = -5+fvar(2), ScreenHeight-51
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+;---------------------------------------------------------------------------------
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(6003)<2
+anim = 6003
+ID = 6003
+pos = -5+fvar(2), ScreenHeight-16
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(6000)<2
+anim = 6000
+ID = 6000
+pos = -5+fvar(2), ScreenHeight-16
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+;Birllo arriba
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(6005)<2 && fvar(8)>=100
+anim = 6005
+ID = 6005
+pos = -5+fvar(2), ScreenHeight-16
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60055)<2 && fvar(8)>=200
+anim = 6005
+ID = 60055
+pos = -5+fvar(2), ScreenHeight-25
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60056)<2 && fvar(8)>=300
+anim = 6005
+ID = 60056
+pos = -5+fvar(2), ScreenHeight-33
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60057)<2 && fvar(8)>=400
+anim = 6005
+ID = 60057
+pos = -5+fvar(2), ScreenHeight-43
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+[State 0, Explod]
+type = Explod
+trigger1 =numexplod(60058)<2 && fvar(8)>=500
+anim = 6005
+ID = 60058
+pos = -5+fvar(2), ScreenHeight-52
+space = screen
+facing = facing
+bindtime = -1
+removetime = 1
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .35,.35
+ontop=1
+ownpal = 1
+removeongethit = 0
+;---------------------------------------------
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6000)
+ID =6000
+trans=addalpha
+alpha=floor(Fvar(2)*29),256-floor(Fvar(2)*29)
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6001)
+ID =6001
+trans=addalpha
+alpha=floor(Fvar(2)*29),256-floor(Fvar(2)*29)
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6002)
+ID =6002
+scale=.35,fvar(8)*.00072
+trans=addalpha
+alpha=floor(Fvar(2)*29),256-floor(Fvar(2)*29)
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6003)
+ID =6003
+scale=.35,fvar(8)*.00072
+trans=addalpha
+alpha=floor(Fvar(2)*8),256
+;-----------------------modify de el  brillo
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6004)
+ID =6004
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*7),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60044)
+ID =60044
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*7),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60045)
+ID =60045
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*7),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60046)
+ID =60046
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*7),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60047)
+ID =60047
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*7),256
+;---------------------------------------
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(6005)
+ID =6005
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*25),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60055)
+ID =60055
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*25),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60056)
+ID =60056
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*25),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60057)
+ID =60057
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*25),256
+[State 0, ModifyExplod]
+type = ModifyExplod
+trigger1 = numexplod(60058)
+ID =60058
+scale=.35,.35
+trans=addalpha
+alpha=floor(Fvar(2)*25),256
+
+[State 4000, end]
+type =Destroyself
+trigger1 = time=-1
+;;Super armor
+
+[Statedef 3410]
+type = S
+Movetype=I
+Physics = S
+Velset =0,0
+anim=1
+sprpriority=2
+[State 0, PosSet]
+type = PosSet
+trigger1 =1 
+x = root, pos x
+y = root, pos y
+ignorehitpause =1 
+persistent = 1
+[State 0, AssertSpecial]
+type = AssertSpecial
+trigger1 = 1
+flag = Invisible
+flag2 = Noshadow
+ignorehitpause =1 
+persistent = 1
+[State 0, ChangeAnim]
+type = ChangeAnim
+trigger1 =1
+value = 3410
+ignorehitpause =1 
+persistent = 1
+[State 0, ReversalDef]
+type = ReversalDef
+trigger1 =cond(numhelper(6000),helper(6000),fvar(6)>=100,numhelper(60000)) && time < 150
+reversal.attr = SCA,NA,SA,HA,NP,SP,HP,NT,ST,HT
+pausetime = 0,0
+sparkno = S909992
+hitsound = S11111111111,0
+p1stateno =3411 
+p2stateno=3430
+ignorehitpause = 1
+persistent = 1
+
+[State 0, Null]
+type = Null
+trigger1 =time=150
+trigger1=var(1):=1 
+ignorehitpause = 1
+persistent = 1
+
+[State 0, ChangeState]
+type = ChangeState
+trigger1 =time>=150 
+value =3411
+ignorehitpause =1 
+persistent = 1
+
+[State 0, Destroyself]
+type = Destroyself
+trigger1 = cond(numhelper(6000),helper(6000),fvar(6)<100,numhelper(60000)) && time >=10	
+
+[Statedef 3411]
+type = S
+Movetype=I
+Physics = S
+Velset =0,0
+anim=1
+sprpriority=2
+[State 0, EnvShake]
+type = EnvShake
+trigger1 = time=0
+time = 4
+freq = 60
+ampl = -6
+phase = 90
+ignorehitpause = 1
+persistent = 1
+
+[State 0, PosSet]
+type = PosSet
+trigger1 =1 
+x = root, pos x
+y = root, pos y
+ignorehitpause =1 
+persistent = 1
+[State 0, AssertSpecial]
+type = AssertSpecial
+trigger1 = 1
+flag = Invisible
+flag2 = Noshadow
+ignorehitpause =1 
+persistent = 1
+[State 0, NotHitBy]
+type = NotHitBy
+trigger1 = 1
+value = SCA,NA,SA,HA,NP,SP,HP,NT,ST,HT
+time = 1
+ignorehitpause =1 
+persistent =1 
+[State 0, Null]
+type = Null
+trigger1=time=0
+trigger1 =cond(numhelper(6000),helper(6000),cond(1,fvar(6):=fvar(6)-100,0),0)
+ignorehitpause =1 
+persistent =1
+[State 0, Explod]
+type = Explod
+trigger1 =numhelper(6000)
+anim = 963
+ID = 963
+pos =4, ScreenHeight-18-((helper(6000),fvar(6)/10)-cond(helper(6000),fvar(6)>4,(helper(6000),fvar(6)/100),-2))
+space = screen
+facing = facing
+bindtime = -1
+removetime = -2
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .08,.08
+ontop=1
+remappal=1153,6
+ownpal = 1
+removeongethit = 0
+persistent=0
+[State 0, Explod]
+type = Explod
+trigger1 =numhelper(6000)
+anim = 904
+ID = 904
+pos =4, ScreenHeight-18-((helper(6000),fvar(6)/10)-cond(helper(6000),fvar(6)>4,(helper(6000),fvar(6)/100),-3))
+space = screen
+facing = facing
+bindtime = -1
+removetime = -2
+pausemovetime = 999999999999
+supermovetime=999999999
+scale = .05,.05
+trans=addalpha
+alpha=150,256
+ontop=1
+ownpal = 1
+removeongethit = 0
+persistent=0
+[State 0, Helper]
+type = Helper
+trigger1 = !time && !var(1) && p2bodydist x < 40 && p2bodydist x >-40
+helpertype = normal 
+name = "onda"
+ID = 3420
+stateno =3420 
+pos = -5,0
+postype = p1    
+facing = 1
+keyctrl = 0
+ownpal = 0
+supermovetime = 99999999999
+pausemovetime = 99999999999
+size.ground.back = 35
+size.ground.front = 35
+size.air.back =35 
+size.air.front = 35
+size.height = 115
+size.head.pos = 0, -115
+size.mid.pos = 0,-75  
+ignorehitpause = 1
+persistent = 1
+[State 0, Helper]
+type = Helper
+trigger1 = !time && !var(1) && p2bodydist x < 40 && p2bodydist x >-40
+helpertype = normal 
+name = "onda"
+ID = 3421
+stateno =3420 
+pos = 5,0
+postype = p1    
+facing = 1
+keyctrl = 0
+ownpal = 0
+supermovetime = 99999999999
+pausemovetime = 99999999999
+size.ground.back = 35
+size.ground.front = 35
+size.air.back =35 
+size.air.front = 35
+size.height = 115
+size.head.pos = 0, -115
+size.mid.pos = 0,-75  
+ignorehitpause = 1
+persistent = 1
+[State 0, Helper]
+type = Helper
+trigger1 = !time && !var(1) && p2bodydist x < 40 && p2bodydist x >-40
+helpertype = normal 
+name = "onda"
+ID = 3422
+stateno =3420 
+pos = 0,-58
+postype = p1    
+facing = 1
+keyctrl = 0
+ownpal = 0
+supermovetime = 99999999999
+pausemovetime = 99999999999
+size.ground.back = 80
+size.ground.front = 80
+size.air.back =60
+size.air.front = 60
+size.height = 40
+size.head.pos = 0, -115
+size.mid.pos = 0,-75  
+ignorehitpause = 1
+persistent = 1
+[State 0, Helper]
+type = Helper
+trigger1 = !time && !var(1) && p2bodydist x < 40 && p2bodydist x >-40
+helpertype = normal 
+name = "onda"
+ID = 3423
+stateno =3420 
+pos = 0,0
+postype = p1    
+facing = 1
+keyctrl = 0
+ownpal = 0
+supermovetime = 99999999999
+pausemovetime = 99999999999
+size.ground.back = 80
+size.ground.front = 80
+size.air.back =60 
+size.air.front = 60
+size.height = 40
+size.head.pos = 0, -115
+size.mid.pos = 0,-75  
+ignorehitpause = 1
+persistent = 1
+[State 0, Explod]
+type = Explod
+trigger1 =time=0 && root, pos y !=0  && !var(1)
+anim = 3422
+ID = 3422
+space = stage
+pos = 0, -30
+facing = facing
+vfacing = 1
+bindid=-1
+bindtime = -1
+removetime = -2
+pausemovetime = 9999
+scale = .3,.3
+trans=addalpha
+alpha=180,256
+sprpriority = 999
+ownpal = 1
+removeongethit = 0
+persistent=0
+[State 0, Explod]
+type = Explod
+trigger1 =time=0 && root, pos y =0  && !var(1)
+anim = 961
+ID = 961
+space = stage
+pos = (pos x+(2*root,facing)) + camerapos x , pos y+4
+facing = facing
+vfacing = 1
+removetime = -2
+pausemovetime = 9999
+scale = .25,.3
+trans=addalpha
+alpha=100,256
+sprpriority = 0
+ownpal = 1
+removeongethit = 0
+persistent=0
+[State 0, Explod]
+type = Explod
+trigger1 =time=0 && root, pos y =0  && !var(1)
+anim = 3423
+ID = 3423
+space = stage
+pos = 0, -22
+facing = facing
+vfacing = 1
+bindid=-1
+bindtime = -1
+removetime = -2
+pausemovetime = 9999
+scale = .3,.3
+trans=addalpha
+alpha=180,256
+sprpriority = 999
+ownpal = 1
+removeongethit = 0
+persistent=0
+[State 0, Explod]
+type = Explod
+trigger1 =time=0   && !var(1)
+anim =904
+ID = 904
+space = stage
+pos = 0, -30
+facing = facing
+vfacing = 1
+bindid=-1
+bindtime = -1
+removetime = -2
+pausemovetime = 9999
+scale = .4,.4
+trans=addalpha
+alpha=140,256
+sprpriority = 999
+ownpal = 1
+removeongethit = 0
+persistent=0
+
+[State 0, Null]
+type = Null
+trigger1 =time=0
+trigger1=var(1):=0 
+ignorehitpause = 1
+persistent = 1
+
+
+[State 0, ChangeState]
+type = ChangeState
+trigger1 =time=5
+value =3410
+ctrl = 0
+ignorehitpause = 1
+persistent = 1
+;Onda
+[Statedef 3420]
+type = S
+Movetype=I
+Physics = S
+Velset =0,0
+anim=3420
+sprpriority=2
+
+[State 0, PosSet]
+type = velset
+trigger1 =ishelper(3420)
+x = 30
+ignorehitpause =1 
+persistent = 1
+[State 0, PosSet]
+type = velset
+trigger1 =ishelper(3421)
+x = -30
+ignorehitpause =1 
+persistent = 1
+[State 0, PosSet]
+type = velset
+trigger1 =ishelper(3422)
+Y = -10
+ignorehitpause =1 
+persistent = 1
+[State 0, PosSet]
+type = velset
+trigger1 =ishelper(3423)
+Y = 10
+ignorehitpause =1 
+persistent = 1
+[State 0, PosSet]
+type = posset
+trigger1 =ishelper(3422) || ishelper(3423)
+x = root,pos x
+ignorehitpause =1 
+persistent = 1
+[State 0, ChangeAnim]
+type = ChangeAnim
+trigger1 = ishelper(3422) || ishelper(3423)
+value = 3421
+elem = 1
+ignorehitpause = 1
+persistent =1 
+
+[State 0, AssertSpecial]
+type = AssertSpecial
+trigger1 = 1
+flag = Invisible
+flag2 = Noshadow
+ignorehitpause =1 
+persistent = 1
+[State 0, NotHitBy]
+type = NotHitBy
+trigger1 = 1
+value = SCA,NA,SA,HA,NP,SP,HP,NT,ST,HT
+time = 1
+ignorehitpause =1 
+persistent =1 
+[State 0, PlayerPush]
+type = PlayerPush
+trigger1 = 1
+value = 1
+ignorehitpause = 1
+persistent =1 
+
+[State 0, ChangeState]
+type = Destroyself
+trigger1 =time=5 
+[Statedef 3430]
+type = A
+Movetype=A
+Physics = S
+Velset =0,0
+sprpriority=2
+[State 0, ChangeAnim2]
+type = ChangeAnim2
+trigger1 = ishelper
+value = 3430
+ignorehitpause = 1
+persistent = 1
+[State 0, 1]
+type = HitDef
+trigger1 = ishelper
+attr = S, NA
+damage = 0
+hitonce=1
+animtype = Light
+guardflag = MA
+hitflag=MAFD
+priority = 3, Hit
+pausetime = 0,0
+sparkno = 99
+affectteam=F
+sparkxy = -10, -76
+hitsound = 99, 0
+guardsound = 6, 0
+ground.type = High
+ground.slidetime = 5
+ground.hittime  = 15
+ground.velocity = -4
+airguard.velocity = -1.9,-.8
+air.type = High
+air.velocity = -1.4,-3
+air.hittime = 12
+fall.recover=0
+persistent=0
+[State 0, TargetState]
+type = TargetState
+trigger1 = NumTarget
+value =3431
+ID = -1
+ignorehitpause =1 
+persistent = 1
+[State 0, AssertSpecial]
+type = AssertSpecial
+trigger1 = 1
+flag=unguardable
+[State 0, RemoveExplod]
+type = RemoveExplod
+trigger1 =1 
+id = -1
+ignorehitpause = 1
+persistent = 1
+[State 0, Turn]
+type = Turn
+trigger1 =!time && ishelper
+ignorehitpause =1
+persistent = 1
+[State 0, Posadd]
+type = Posset
+trigger1 = ishelper
+x = root, pos x
+y = root, pos y+root,const(size.mid.pos.y)
+ignorehitpause =1 
+persistent = 1
+
+[State 0, StopSnd]
+type = StopSnd
+trigger1 = 1
+channel = -1
+ignorehitpause = 1
+persistent = 1
+
+[State 0, ChangeState]
+type = Destroyself
+trigger1 =ishelper  && movecontact
+trigger2=time>15
+[State 0, ChangeState]
+type = Selfstate
+trigger1 =!ishelper 
+value =cond(pos y = 0,0,50)
+ctrl =cond(pos y = 0,1,0)
+ignorehitpause = 1
+persistent = 1
+
+[Statedef 3431]
+type = A
+Movetype=A
+Physics = S
+sprpriority=2
+[State 0, RemoveExplod]
+type = RemoveExplod
+trigger1 =1 
+id = -1
+ignorehitpause = 1
+persistent = 1
+[State 0, ChangeState]
+type = Selfstate
+trigger1 =!ishelper 
+value =cond(pos y = 0,0,50)
+ctrl =cond(pos y = 0,1,0)
+ignorehitpause = 1
+persistent = 1
