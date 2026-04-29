@@ -3497,10 +3497,8 @@ int main(int argc, char** argv) {
         /* Battle music: pick once per match (not per round) */
         if (state == STATE_BATTLE && prevState == STATE_CHAR_SELECT) {
             if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
-            { int rndB = GetRandomValue(0, 2);
-              if (rndB == 0) bgm = LoadMusicStream("assets/music/track2.mp3");
-              else if (rndB == 1) bgm = LoadMusicStream("assets/music/track3.mp3");
-              else bgm = LoadMusicStream("assets/menu_theme.mp3"); }
+            if (GetRandomValue(0, 1) == 0) bgm = LoadMusicStream("assets/music/track2.mp3");
+            else bgm = LoadMusicStream("assets/music/track3.mp3");
             gTargetMusicVol = 0.6f;
             gCurrentMusicVol = 0.0f;
             SetMusicVolume(bgm, gCurrentMusicVol);
@@ -3560,7 +3558,8 @@ int main(int argc, char** argv) {
             if (GetKeyPressed() > 0) {
                 state = STATE_MAIN_MENU;
                 if (musicLoaded) { StopMusicStream(bgm); UnloadMusicStream(bgm); }
-                bgm = LoadMusicStream("assets/music/track1.mp3");
+                if (GetRandomValue(0, 1) == 0) bgm = LoadMusicStream("assets/menu_theme.mp3");
+                else bgm = LoadMusicStream("assets/music/track1.mp3");
                 gTargetMusicVol = 0.6f;
                 gCurrentMusicVol = 0.6f;
                 SetMusicVolume(bgm, 0.60f);
@@ -3571,6 +3570,11 @@ int main(int argc, char** argv) {
         }
 
         if (musicLoaded) {
+            /* State specific target volume */
+            if (state == STATE_INTRO) gTargetMusicVol = 0.5f;
+            else if (state == STATE_CHAR_SELECT) gTargetMusicVol = 0.3f;
+            else gTargetMusicVol = 0.6f;
+
             /* Smooth volume transitions */
             if (gCurrentMusicVol < gTargetMusicVol) {
                 gCurrentMusicVol += GetFrameTime() * 0.4f;
@@ -3584,6 +3588,17 @@ int main(int argc, char** argv) {
             UpdateMusicStream(bgm);
             if (!IsMusicStreamPlaying(bgm) || GetMusicTimePlayed(bgm) >= GetMusicTimeLength(bgm) - 0.05f) {
                 StopMusicStream(bgm);
+                UnloadMusicStream(bgm);
+                
+                if (state == STATE_BATTLE || state == STATE_DOMAIN || state == STATE_DOMAIN_CLASH || state == STATE_GAME_OVER) {
+                    if (GetRandomValue(0, 1) == 0) bgm = LoadMusicStream("assets/music/track2.mp3");
+                    else bgm = LoadMusicStream("assets/music/track3.mp3");
+                } else {
+                    if (GetRandomValue(0, 1) == 0) bgm = LoadMusicStream("assets/menu_theme.mp3");
+                    else bgm = LoadMusicStream("assets/music/track1.mp3");
+                }
+                
+                SetMusicVolume(bgm, gCurrentMusicVol);
                 PlayMusicStream(bgm);
             }
         }
