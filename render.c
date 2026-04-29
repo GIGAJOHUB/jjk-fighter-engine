@@ -439,6 +439,34 @@ void DrawFighterBody(Fighter* f, bool isP1, float introProgress, bool domainCast
 
     DrawUltimateEffect(f);
 
+    /* MUGEN Visual Effects */
+    if (f->mugenState == 3100 || f->mugenState == 3110) { // Blue
+        float scale = 1.0f + 0.1f * sinf(GetTime() * 10.0f);
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 50.0f, by + bh*0.5f}, 25.0f * scale, ColorAlpha((Color){50, 150, 255, 200}, 0.8f));
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 50.0f, by + bh*0.5f}, 35.0f * scale, ColorAlpha((Color){100, 200, 255, 100}, 0.5f));
+    }
+    if (f->mugenState == 3000 || f->mugenState == 3010) { // Red
+        float scale = 1.0f + 0.1f * sinf(GetTime() * 10.0f);
+        float chargeMult = 1.0f + f->boogieChargeTimer;
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 40.0f, by + bh*0.4f}, 25.0f * scale * chargeMult, ColorAlpha((Color){255, 50, 50, 200}, 0.8f));
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 40.0f, by + bh*0.4f}, 35.0f * scale * chargeMult, ColorAlpha((Color){255, 100, 100, 100}, 0.5f));
+        
+        if (f->boogieChargeTimer > 0.0f) {
+            char chargeTxt[32];
+            snprintf(chargeTxt, sizeof(chargeTxt), "CHARGE %d%%", (int)(f->boogieChargeTimer * 50.0f));
+            int cw = MeasureText(chargeTxt, 14);
+            DrawText(chargeTxt, (int)(bx + bw * 0.5f - cw * 0.5f), (int)(by + bh + 10.0f), 14, (Color){255, 80, 80, 255});
+        }
+    }
+    if (f->mugenState == 3300 || f->mugenState == 3310) { // Purple
+        float scale = 1.0f + 0.1f * sinf(GetTime() * 15.0f);
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 60.0f, by + bh*0.5f}, 45.0f * scale, ColorAlpha((Color){150, 50, 255, 220}, 0.9f));
+        DrawCircleV((Vector2){bx + bw*0.5f + f->facingDir * 60.0f, by + bh*0.5f}, 65.0f * scale, ColorAlpha((Color){200, 100, 255, 120}, 0.6f));
+    }
+    if (f->mugenState == 3400) { // Domain Expansion 
+        DrawCircleLines((int)(bx + bw*0.5f), (int)(by + bh*0.5f), 120.0f + 10.0f*sinf(GetTime()*5.0f), (Color){20, 20, 20, 150});
+    }
+
     if (f->isStunned) {
         const char* txt = "STUNNED";
         int sw = MeasureText(txt, 12);

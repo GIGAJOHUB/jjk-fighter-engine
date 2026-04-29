@@ -1211,6 +1211,12 @@ static void UpdateMugenState(Fighter* f, Fighter* opponent, bool isP1) {
                     if (hitLanded) {
                         f->mugenHitApplied = true;
                         int damage = 20; // Default MUGEN damage if not specified
+                        float chargeMult = 1.0f;
+                        if (f->mugenState == 3000 && f->boogieChargeTimer > 0.0f) {
+                            chargeMult = 1.0f + (f->boogieChargeTimer * 2.0f); // Up to 5x damage for full charge
+                            f->boogieChargeTimer = 0.0f; // Reset after hit
+                        }
+                        damage = (int)((float)damage * chargeMult);
                         if (opponent->isBlocking) {
                             opponent->blockHits++;
                             if (opponent->blockHits >= 3) {
@@ -1322,8 +1328,26 @@ static void CheckMugenCommands(Fighter* f, Fighter* opponent, bool isP1, bool is
     } else if (pressedLeft) {
         f->facingDir = -1;
         if (f->mugenState != 21) SetMugenState(f, 21);
-    } else if (f->onGround && f->mugenState != 0 && f->mugenState != 11 && !pressedLeft && !pressedRight) {
-        SetMugenState(f, 0);
+    } else if (f->onGround && f->mugenState != 0 && f->mugenState != 11 && f->mugenState != 3000 && f->mugenState != 3100 && f->mugenState != 3300 && f->mugenState != 3310 && f->mugenState != 3400 && !pressedLeft && !pressedRight) {
+        if (f->mugenState == 20 || f->mugenState == 21) {
+            SetMugenState(f, 0);
+        }
+    }
+
+    /* Charge mechanics for Red */
+    bool holdingAb2 = isLocal ? BindingDown(gControls[profile].keys[ACT_ABILITY2]) : netInput->abilityR;
+    if (f->mugenState == 3000) {
+        if (holdingAb2 && f->boogieChargeTimer < 2.0f) {
+            f->boogieChargeTimer += GetFrameTime();
+            /* Freeze animation while charging so it doesn't end */
+            if (f->anim.currentFrame >= 3) {
+                f->anim.currentFrame = 3;
+                f->anim.finished = false;
+            }
+        } else if (!holdingAb2 && f->boogieChargeTimer > 0.0f) {
+            /* Let it finish and fire */
+            f->anim.finished = false; 
+        }
     }
 }
 
@@ -4061,8 +4085,8 @@ int main(int argc, char** argv) {
                     if (IsKeyPressed(KEY_TAB) && p1sel.confirmed) frontend.charSelectFocus = 1 - frontend.charSelectFocus;
                     if (IsKeyPressed(KEY_A) && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor > 0) ? focusSel->cursor - 1 : CHAR_COUNT - 1;
                     if (IsKeyPressed(KEY_D) && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor < CHAR_COUNT - 1) ? focusSel->cursor + 1 : 0;
-                    if (wheel < -0.1f && !focusSel->confirmed && focusSel->cursor < CHAR_COUNT - 1) focusSel->cursor++;
-                    if (wheel > 0.1f && !focusSel->confirmed && focusSel->cursor > 0) focusSel->cursor--;
+                    if (wheel < -0.1f && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor + 1) % CHAR_COUNT;
+                    if (wheel > 0.1f && !focusSel->confirmed) focusSel->cursor = (focusSel->cursor + CHAR_COUNT - 1) % CHAR_COUNT;
                     for (int i = 0; i < CHAR_COUNT; i++) {
                         Rectangle card = CharSelectCardRect(i, p1sel.cursor, p2sel.cursor, true, frontend.charSelectFocus);
                         if (CheckCollisionPointRec(mousePos, card)) {
