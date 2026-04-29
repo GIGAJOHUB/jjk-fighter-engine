@@ -90,15 +90,15 @@ def parse_statedefs(path):
                     'type': 'S', 'movetype': 'I', 'physics': 'S',
                     'anim': sid, 'velset': None, 'ctrl': None,
                     'hitdefs': [], 'sounds': [], 'velsets': [],
-                    'changestates': [], 'helpers': []
+                    'changestates': [], 'helpers': [], 'controllers': []
                 }
                 current_state_block = None
                 continue
             
-            # Match [State N, label]
             m = re.match(r'\[State\s+[^,\]]*,?\s*(.*?)\]', line, re.IGNORECASE)
             if m and current_statedef is not None:
-                current_state_block = {'type': None}
+                current_state_block = {'type': None, 'triggers': [], 'params': {}}
+                states[current_statedef]['controllers'].append(current_state_block)
                 continue
             
             if current_statedef is None:
@@ -133,6 +133,10 @@ def parse_statedefs(path):
                 
                 # State controller properties
                 if current_state_block is not None:
+                    if k.startswith('trigger'):
+                        current_state_block['triggers'].append({'name': k, 'condition': v})
+                    else:
+                        current_state_block['params'][k] = v
                     if k == 'type':
                         current_state_block['type'] = v
                         if v.lower() == 'hitdef':
@@ -319,7 +323,7 @@ def parse_cmd(path):
             # [State -1, label]
             m = re.match(r'\[State\s+-1\s*,\s*(.*?)\]', line, re.IGNORECASE)
             if m:
-                current = {'label': m.group(1), 'value': None, 'triggers': []}
+                current = {'type': 'changestate', 'value': None, 'triggers': [], 'label': m.group(1)}
                 state_entries.append(current)
                 continue
             
@@ -328,7 +332,9 @@ def parse_cmd(path):
                 k = k.strip().lower()
                 v = v.split(';')[0].strip()
                 
-                if k == 'name':
+                if 'triggers' in current and k.startswith('trigger'):
+                    current['triggers'].append({'name': k, 'condition': v})
+                elif k == 'name':
                     current['name'] = v.strip('"')
                 elif k == 'command':
                     current['command'] = v
@@ -445,9 +451,26 @@ def build_chardata(mugen_dir, output_dir):
             entry['sounds'] = sdata['sounds']
         if sdata['changestates']:
             entry['next_states'] = sdata['changestates']
+        if sdata.get('controllers'):
+            entry['controllers'] = sdata['controllers']
         state_action_map[str(sid)] = entry
     
-    # Build command → state mapping from cmd
+    # Build command mapping from cmd
+    command_list = []
+    if cmd_data.get('commands'):
+        for c in cmd_data['commands']:
+            if 'name' in c and 'command' in c:
+                command_list.append({
+                    'name': c['name'],
+                    'command': c['command'],
+                    'time': c.get('time', 15)
+                })
+
+    state_entries = []
+    if cmd_data.get('state_entries'):
+        for e in cmd_data['state_entries']:
+            state_entries.append(e)
+
     input_map = {}
     if cmd_data.get('state_entries'):
         for entry in cmd_data['state_entries']:
@@ -462,6 +485,8 @@ def build_chardata(mugen_dir, output_dir):
         'size': char_size,
         'data': char_data,
         'input_map': input_map,
+        'commands': command_list,
+        'cmd_states': state_entries,
         'states': state_action_map,
     }
     

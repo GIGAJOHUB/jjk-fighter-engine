@@ -23,6 +23,21 @@
 #define MC_MAX_SOUNDS      8
 #define MC_MAX_NEXT_STATES 4
 #define MC_MAX_INPUTS      16
+#define MC_MAX_TRIGGERS    8
+#define MC_MAX_CONTROLLERS 16
+
+typedef enum {
+    MC_CTRL_NONE,
+    MC_CTRL_CHANGESTATE,
+    MC_CTRL_VELSET,
+    MC_CTRL_HITDEF,
+    MC_CTRL_PLAYSND
+} ControllerType;
+
+typedef struct {
+    char name[32];
+    char condition[64];
+} Trigger;
 
 /* ── MUGEN Physics Constants (from CNS [Velocity], [Movement]) ── */
 typedef struct {
@@ -70,6 +85,18 @@ typedef struct {
     int   groundSlidetime;
 } MCHitDef;
 
+typedef struct {
+    ControllerType type;
+    Trigger triggers[MC_MAX_TRIGGERS];
+    int triggerCount;
+    union {
+        struct { int value; } changeState;
+        struct { float x, y; } velSet;
+        MCHitDef hitdef;
+        struct { int group, item; } playSnd;
+    };
+} MugenController;
+
 /* ── State Definition (from CNS [Statedef N]) ── */
 typedef struct {
     int    stateId;
@@ -86,6 +113,9 @@ typedef struct {
     
     int    nextStates[MC_MAX_NEXT_STATES];
     int    nextStateCount;
+    
+    MugenController controllers[MC_MAX_CONTROLLERS];
+    int             controllerCount;
 } MCState;
 
 /* ── Input Mapping (from CMD) ── */
@@ -93,6 +123,13 @@ typedef struct {
     char label[32];
     int  stateId;
 } MCInputEntry;
+
+#define MAX_SEQ 8
+typedef struct {
+    char name[32];
+    char commandStr[64];
+    int  time;
+} MugenCommand;
 
 /* ── Full Character ── */
 typedef struct {
@@ -106,6 +143,12 @@ typedef struct {
     
     MCInputEntry inputs[MC_MAX_INPUTS];
     int          inputCount;
+    
+    MugenCommand commands[32];
+    int          commandCount;
+    
+    MugenController cmdStates[32];
+    int             cmdStateCount;
     
     bool ready;
 } MugenCharData;
@@ -307,6 +350,112 @@ static void mc_parse_hitdefs(const char** pp, MCState* state) {
     *pp = p;
 }
 
+static void mc_parse_controllers(const char** pp, MCState* state) {
+    const char* p = *pp;
+    p = mc_skip_to(p, '[');
+    
+    while (*p && *p != ']' && state->controllerCount < MC_MAX_CONTROLLERS) {
+        p = mc_skip_ws(p);
+        if (*p == ']') break;
+        if (*p == ',') { p++; continue; }
+        
+        if (*p == '{') {
+            p++;
+            MugenController* ctrl = &state->controllers[state->controllerCount];
+            memset(ctrl, 0, sizeof(MugenController));
+            
+            while (*p && *p != '}') {
+                p = mc_skip_ws(p);
+                if (*p == '}' || *p == '\0') break;
+                if (*p == ',') { p++; continue; }
+                
+                if (*p == '"') {
+                    char key[64];
+                    p = mc_read_string(p, key, sizeof(key));
+                    p = mc_skip_to(p, ':');
+                    p = mc_skip_ws(p);
+                    
+                    if (strcmp(key, "type") == 0) {
+                        char typeStr[32];
+                        p = mc_read_string(p, typeStr, sizeof(typeStr));
+                        if (strcasecmp(typeStr, "changestate") == 0) ctrl->type = MC_CTRL_CHANGESTATE;
+                        else if (strcasecmp(typeStr, "velset") == 0) ctrl->type = MC_CTRL_VELSET;
+                        else if (strcasecmp(typeStr, "hitdef") == 0) ctrl->type = MC_CTRL_HITDEF;
+                        else if (strcasecmp(typeStr, "playsnd") == 0) ctrl->type = MC_CTRL_PLAYSND;
+                    }
+                    else if (strcmp(key, "triggers") == 0) {
+                        p = mc_skip_to(p, '[');
+                        while (*p && *p != ']') {
+                            p = mc_skip_ws(p);
+                            if (*p == ']') break;
+                            if (*p == ',') { p++; continue; }
+                            if (*p == '{') {
+                                p++;
+                                Trigger* trg = NULL;
+                                if (ctrl->triggerCount < MC_MAX_TRIGGERS) trg = &ctrl->triggers[ctrl->triggerCount++];
+                                while (*p && *p != '}') {
+                                    p = mc_skip_ws(p);
+                                    if (*p == '}') break;
+                                    if (*p == ',') { p++; continue; }
+                                    if (*p == '"') {
+                                        char tk[32];
+                                        p = mc_read_string(p, tk, sizeof(tk));
+                                        p = mc_skip_to(p, ':');
+                                        p = mc_skip_ws(p);
+                                        if (strcmp(tk, "name") == 0) {
+                                            if (trg) p = mc_read_string(p, trg->name, sizeof(trg->name));
+                                            else p = mc_skip_value(p);
+                                        } else if (strcmp(tk, "condition") == 0) {
+                                            if (trg) p = mc_read_string(p, trg->condition, sizeof(trg->condition));
+                                            else p = mc_skip_value(p);
+                                        } else p = mc_skip_value(p);
+                                    } else p++;
+                                }
+                                if (*p == '}') p++;
+                            } else p++;
+                        }
+                        if (*p == ']') p++;
+                    }
+                    else if (strcmp(key, "params") == 0) {
+                        p = mc_skip_to(p, '{');
+                        while (*p && *p != '}') {
+                            p = mc_skip_ws(p);
+                            if (*p == '}') break;
+                            if (*p == ',') { p++; continue; }
+                            if (*p == '"') {
+                                char pk[32];
+                                p = mc_read_string(p, pk, sizeof(pk));
+                                p = mc_skip_to(p, ':');
+                                p = mc_skip_ws(p);
+                                if (ctrl->type == MC_CTRL_CHANGESTATE && strcmp(pk, "value") == 0) {
+                                    ctrl->changeState.value = mc_read_int(&p);
+                                } else if (ctrl->type == MC_CTRL_VELSET && strcmp(pk, "x") == 0) {
+                                    ctrl->velSet.x = mc_read_float(&p);
+                                } else if (ctrl->type == MC_CTRL_VELSET && strcmp(pk, "y") == 0) {
+                                    ctrl->velSet.y = mc_read_float(&p);
+                                } else if (ctrl->type == MC_CTRL_PLAYSND && strcmp(pk, "value") == 0) {
+                                    char sndVal[32];
+                                    p = mc_read_string(p, sndVal, sizeof(sndVal));
+                                    if (strchr(sndVal, ',')) {
+                                        ctrl->playSnd.group = atoi(sndVal);
+                                        ctrl->playSnd.item = atoi(strchr(sndVal, ',') + 1);
+                                    }
+                                } else p = mc_skip_value(p);
+                            } else p++;
+                        }
+                        if (*p == '}') p++;
+                    }
+                    else p = mc_skip_value(p);
+                } else p++;
+            }
+            if (*p == '}') p++;
+            state->controllerCount++;
+        } else p++;
+    }
+    if (*p == ']') p++;
+    *pp = p;
+}
+
 /* Parse states object */
 static void mc_parse_states(const char** pp, MugenCharData* mc) {
     const char* p = *pp;
@@ -371,6 +520,7 @@ static void mc_parse_states(const char** pp, MugenCharData* mc) {
                             }
                             if (*p == ']') p++;
                         }
+                        else if (strcmp(key, "controllers") == 0) mc_parse_controllers(&p, s);
                         else if (strcmp(key, "sounds") == 0) p = mc_skip_value(p);
                         else p = mc_skip_value(p);
                     } else p++;
@@ -403,6 +553,120 @@ static void mc_parse_inputs(const char** pp, MugenCharData* mc) {
         } else p++;
     }
     if (*p == '}') p++;
+    *pp = p;
+}
+
+static void mc_parse_commands(const char** pp, MugenCharData* mc) {
+    const char* p = *pp;
+    p = mc_skip_to(p, '[');
+    
+    while (*p && *p != ']' && mc->commandCount < 32) {
+        p = mc_skip_ws(p);
+        if (*p == ']') break;
+        if (*p == ',') { p++; continue; }
+        
+        if (*p == '{') {
+            p++;
+            MugenCommand* cmd = &mc->commands[mc->commandCount];
+            memset(cmd, 0, sizeof(MugenCommand));
+            
+            while (*p && *p != '}') {
+                p = mc_skip_ws(p);
+                if (*p == '}' || *p == '\0') break;
+                if (*p == ',') { p++; continue; }
+                if (*p == '"') {
+                    char key[32];
+                    p = mc_read_string(p, key, sizeof(key));
+                    p = mc_skip_to(p, ':');
+                    p = mc_skip_ws(p);
+                    if (strcmp(key, "name") == 0) p = mc_read_string(p, cmd->name, sizeof(cmd->name));
+                    else if (strcmp(key, "command") == 0) p = mc_read_string(p, cmd->commandStr, sizeof(cmd->commandStr));
+                    else if (strcmp(key, "time") == 0) cmd->time = mc_read_int(&p);
+                    else p = mc_skip_value(p);
+                } else p++;
+            }
+            if (*p == '}') p++;
+            mc->commandCount++;
+        } else p++;
+    }
+    if (*p == ']') p++;
+    *pp = p;
+}
+
+static void mc_parse_cmd_states(const char** pp, MugenCharData* mc) {
+    const char* p = *pp;
+    p = mc_skip_to(p, '[');
+    
+    while (*p && *p != ']' && mc->cmdStateCount < 32) {
+        p = mc_skip_ws(p);
+        if (*p == ']') break;
+        if (*p == ',') { p++; continue; }
+        
+        if (*p == '{') {
+            p++;
+            MugenController* ctrl = &mc->cmdStates[mc->cmdStateCount];
+            memset(ctrl, 0, sizeof(MugenController));
+            
+            while (*p && *p != '}') {
+                p = mc_skip_ws(p);
+                if (*p == '}' || *p == '\0') break;
+                if (*p == ',') { p++; continue; }
+                
+                if (*p == '"') {
+                    char key[64];
+                    p = mc_read_string(p, key, sizeof(key));
+                    p = mc_skip_to(p, ':');
+                    p = mc_skip_ws(p);
+                    
+                    if (strcmp(key, "type") == 0) {
+                        char typeStr[32];
+                        p = mc_read_string(p, typeStr, sizeof(typeStr));
+                        if (strcasecmp(typeStr, "changestate") == 0) ctrl->type = MC_CTRL_CHANGESTATE;
+                    }
+                    else if (strcmp(key, "value") == 0) {
+                        ctrl->changeState.value = mc_read_int(&p);
+                    }
+                    else if (strcmp(key, "triggers") == 0) {
+                        p = mc_skip_to(p, '[');
+                        while (*p && *p != ']') {
+                            p = mc_skip_ws(p);
+                            if (*p == ']') break;
+                            if (*p == ',') { p++; continue; }
+                            if (*p == '{') {
+                                p++;
+                                Trigger* trg = NULL;
+                                if (ctrl->triggerCount < MC_MAX_TRIGGERS) trg = &ctrl->triggers[ctrl->triggerCount++];
+                                while (*p && *p != '}') {
+                                    p = mc_skip_ws(p);
+                                    if (*p == '}') break;
+                                    if (*p == ',') { p++; continue; }
+                                    if (*p == '"') {
+                                        char tk[32];
+                                        p = mc_read_string(p, tk, sizeof(tk));
+                                        p = mc_skip_to(p, ':');
+                                        p = mc_skip_ws(p);
+                                        if (strcmp(tk, "name") == 0) {
+                                            if (trg) p = mc_read_string(p, trg->name, sizeof(trg->name));
+                                            else p = mc_skip_value(p);
+                                        } else if (strcmp(tk, "condition") == 0) {
+                                            if (trg) p = mc_read_string(p, trg->condition, sizeof(trg->condition));
+                                            else p = mc_skip_value(p);
+                                        } else p = mc_skip_value(p);
+                                    } else p++;
+                                }
+                                if (*p == '}') p++;
+                            } else p++;
+                        }
+                        if (*p == ']') p++;
+                    }
+                    else p = mc_skip_value(p);
+                } else p++;
+            }
+            if (*p == '}') p++;
+            mc->cmdStateCount++;
+        } else p++;
+    }
+    if (*p == ']') p++;
     *pp = p;
 }
 
@@ -520,6 +784,8 @@ void MC_Load(MugenCharData* mc, const char* chardataPath) {
             else if (strcmp(key, "data") == 0) mc_parse_data(&p, &mc->data);
             else if (strcmp(key, "states") == 0) mc_parse_states(&p, mc);
             else if (strcmp(key, "input_map") == 0) mc_parse_inputs(&p, mc);
+            else if (strcmp(key, "commands") == 0) mc_parse_commands(&p, mc);
+            else if (strcmp(key, "cmd_states") == 0) mc_parse_cmd_states(&p, mc);
             else p = mc_skip_value(p);
         } else p++;
     }

@@ -1160,14 +1160,60 @@ static void SetMugenState(Fighter* f, int stateId) {
     else f->mugenCtrl = true;
     MA_SetAction(&f->anim, GetGojoChar(), animId);
     
-    /* Audio Cues */
-    if (stateId == 200) { PlayGojoSfx(f, 0); TraceLog(LOG_INFO, "[SND] Playing s03.wav for state 200"); }
-    if (stateId == 3000) { PlayGojoSfx(f, 3); TraceLog(LOG_INFO, "[SND] Playing red.wav for state 3000"); }
-    if (stateId == 3100) { PlayGojoSfx(f, 1); TraceLog(LOG_INFO, "[SND] Playing blue.wav for state 3100"); }
-    if (stateId == 3300) { PlayGojoSfx(f, 4); TraceLog(LOG_INFO, "[SND] Playing domain.wav for state 3300"); }
-    if (stateId == 100) { PlayGojoSfx(f, 2); TraceLog(LOG_INFO, "[SND] Playing dash.wav for state 100"); }
-    
     TraceLog(LOG_DEBUG, "MUGEN: State -> %d", stateId);
+}
+
+/* ──────────────── MUGEN INTERPRETER ──────────────── */
+static bool EvaluateCondition(Fighter* f, const char* cond, const char* activeCommand) {
+    char buf[128];
+    strncpy(buf, cond, 127); buf[127] = '\0';
+    char* d = buf;
+    for (char* s = buf; *s; s++) {
+        if (*s != ' ' && *s != '\t' && *s != '"') *d++ = *s;
+    }
+    *d = '\0';
+    
+    if (strncmp(buf, "time=", 5) == 0) return f->mugenStateTime == atoi(buf+5);
+    if (strncmp(buf, "time>", 5) == 0) return f->mugenStateTime > atoi(buf+5);
+    if (strncmp(buf, "time<", 5) == 0) return f->mugenStateTime < atoi(buf+5);
+    if (strncmp(buf, "animelem=", 9) == 0) return f->anim.currentFrame + 1 == atoi(buf+9);
+    if (strncmp(buf, "animtime=0", 10) == 0) return f->anim.finished;
+    if (strncmp(buf, "ctrl", 4) == 0 && buf[4] == '\0') return f->mugenCtrl;
+    if (strncmp(buf, "ctrl=0", 6) == 0) return !f->mugenCtrl;
+    if (strncmp(buf, "statetype=S", 11) == 0) return f->onGround;
+    if (strncmp(buf, "statetype=A", 11) == 0) return !f->onGround;
+    
+    if (strncmp(buf, "command=", 8) == 0) {
+        if (activeCommand && strcasecmp(buf+8, activeCommand) == 0) return true;
+        return false;
+    }
+    if (strncmp(buf, "command!=", 9) == 0) {
+        if (activeCommand && strcasecmp(buf+9, activeCommand) == 0) return false;
+        return true;
+    }
+    
+    if (strncmp(buf, "1", 1) == 0 && buf[1] == '\0') return true;
+    if (strncmp(buf, "cond", 4) == 0 || strncmp(buf, "numhelper", 9) == 0) return true;
+    return false;
+}
+
+static bool CheckTriggers(Fighter* f, MugenController* ctrl, const char* activeCommand) {
+    if (ctrl->triggerCount == 0) return false;
+    bool triggerAll = true, hasTriggerAll = false;
+    bool block1 = true, hasBlock1 = false;
+
+    for (int i = 0; i < ctrl->triggerCount; i++) {
+        if (strcasecmp(ctrl->triggers[i].name, "triggerall") == 0) {
+            hasTriggerAll = true;
+            if (!EvaluateCondition(f, ctrl->triggers[i].condition, activeCommand)) triggerAll = false;
+        } else if (strcasecmp(ctrl->triggers[i].name, "trigger1") == 0) {
+            hasBlock1 = true;
+            if (!EvaluateCondition(f, ctrl->triggers[i].condition, activeCommand)) block1 = false;
+        }
+    }
+    if (hasTriggerAll && !triggerAll) return false;
+    if (hasBlock1 && block1) return true;
+    return false;
 }
 
 /* Update MUGEN state machine each frame */
@@ -1177,10 +1223,25 @@ static void UpdateMugenState(Fighter* f, Fighter* opponent, bool isP1) {
     MA_Tick(&f->anim, GetGojoChar());
     f->mugenStateTime++;
     
-    /* Simple physics integration */
-    if (f->mugenState == 20) f->hitbox.x += 3.5f * (float)f->facingDir;
-    if (f->mugenState == 21) f->hitbox.x -= 2.5f * (float)f->facingDir;
-    if (f->mugenState == 100) f->hitbox.x += 9.0f * (float)f->facingDir;
+    const MCState* ms = MC_FindState(&gGojoCharData, f->mugenState);
+    if (ms) {
+        /* Run State Controllers */
+        for (int i = 0; i < ms->controllerCount; i++) {
+            MugenController* ctrl = &ms->controllers[i];
+            if (CheckTriggers(f, ctrl, NULL)) {
+                if (ctrl->type == MC_CTRL_CHANGESTATE) {
+                    TraceLog(LOG_INFO, "[MUGEN] Controller: ChangeState -> %d", ctrl->changeState.value);
+                    SetMugenState(f, ctrl->changeState.value);
+                    return; 
+                } else if (ctrl->type == MC_CTRL_VELSET) {
+                    f->hitbox.x += ctrl->velSet.x * f->facingDir;
+                } else if (ctrl->type == MC_CTRL_PLAYSND) {
+                    TraceLog(LOG_INFO, "[MUGEN] PlaySnd %d,%d", ctrl->playSnd.group, ctrl->playSnd.item);
+                    PlayGojoSfx(f, ctrl->playSnd.item); // Temporary mapping
+                }
+            }
+        }
+    }
 
     /* HIT SYSTEM */
     if (!f->mugenHitApplied && f->mugenState != 0 && f->mugenState != 20 && f->mugenState != 21) {
@@ -1256,84 +1317,44 @@ static void UpdateMugenState(Fighter* f, Fighter* opponent, bool isP1) {
     }
 }
 
-/* MUGEN Command Interpreter (DIRECT KEY MAPPING) */
+/* MUGEN Command Interpreter */
 static void CheckMugenCommands(Fighter* f, Fighter* opponent, bool isP1, bool isLocal, const NetInput* netInput) {
-    if (f->charData.id != CHAR_GOJO) return;
+    if (f->charData.id != CHAR_GOJO || !gGojoCharData.ready) return;
     
     int profile = isP1 ? 0 : 1;
     bool pressedLeft  = isLocal ? IsKeyDown(gControls[profile].keys[ACT_LEFT])  : netInput->left;
     bool pressedRight = isLocal ? IsKeyDown(gControls[profile].keys[ACT_RIGHT]) : netInput->right;
     bool pressedDown  = isLocal ? IsKeyDown(gControls[profile].keys[ACT_CROUCH]) : netInput->crouch;
-    bool pressedJump  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_JUMP]) : netInput->jump;
     
     bool pressedAtk   = isLocal ? BindingPressed(gControls[profile].keys[ACT_ATTACK]) : netInput->attack;
-    bool pressedBlock = isLocal ? BindingDown(gControls[profile].keys[ACT_BLOCK]) : netInput->block;
-    bool pressedDash  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_DASH]) : netInput->dodge;
-    
     bool pressedAb1   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY1]) : netInput->abilityE;
     bool pressedAb2   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY2]) : netInput->abilityR;
-    bool pressedTele  = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ABILITY3]) : netInput->abilityF;
-    bool pressedRCT   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_RCT])      : netInput->rct;
     bool pressedDom   = isLocal ? IsKeyPressed(gControls[profile].keys[ACT_ULT])      : netInput->ult;
-    bool pressedInf   = isLocal ? IsKeyPressed(KEY_ONE)                               : (netInput->ceAttack); 
-
-    /* State Overrides */
-    f->isBlocking = pressedBlock && f->onGround;
-    if (f->isBlocking) TraceLog(LOG_INFO, "[INPUT] RightClick -> Block");
-    else f->blockHits = 0;
+    
     f->isCrouching = pressedDown;
-
-    /* Movement & Actions (Unrestricted by mugenCtrl per instructions) */
-    if (pressedAtk) {
-        TraceLog(LOG_INFO, "[INPUT] LeftClick -> State 200");
-        SetMugenState(f, 200);
-    } else if (pressedAb1) {
-        TraceLog(LOG_INFO, "[INPUT] B -> State 3100 (Blue)");
-        SetMugenState(f, 3100);
-        f->lastSpecialState = 3100;
-        f->specialBufferTimer = 1.2f;
-    } else if (pressedAb2) {
-        if (f->lastSpecialState == 3100 && f->specialBufferTimer > 0) {
-            TraceLog(LOG_INFO, "[INPUT] R (Combo) -> State 3310 (Purple)");
-            SetMugenState(f, 3310); // Purple
-            f->lastSpecialState = 0;
-        } else {
-            TraceLog(LOG_INFO, "[INPUT] R -> State 3000 (Red)");
-            SetMugenState(f, 3000); // Red
-            f->lastSpecialState = 3000;
-            f->specialBufferTimer = 1.0f;
+    
+    const char* activeCommand = NULL;
+    if (pressedAtk) activeCommand = "a";
+    else if (pressedAb1) activeCommand = "Blue";
+    else if (pressedAb2) activeCommand = "Red";
+    else if (pressedDom) activeCommand = "c";
+    
+    if (activeCommand) {
+        for (int i = 0; i < gGojoCharData.cmdStateCount; i++) {
+            MugenController* ctrl = &gGojoCharData.cmdStates[i];
+            if (ctrl->type == MC_CTRL_CHANGESTATE && CheckTriggers(f, ctrl, activeCommand)) {
+                TraceLog(LOG_INFO, "[MUGEN] CMD matched %s -> ChangeState %d", activeCommand, ctrl->changeState.value);
+                SetMugenState(f, ctrl->changeState.value);
+                return;
+            }
         }
-    } else if (pressedTele) {
-        TraceLog(LOG_INFO, "[INPUT] T -> State 100 (Teleport)");
-        f->hitbox.x = opponent->hitbox.x - (float)opponent->facingDir * 80.0f;
-        SetMugenState(f, 100); 
-    } else if (pressedDom) {
-        TraceLog(LOG_INFO, "[INPUT] X -> State 3300 (Domain)");
-        SetMugenState(f, 3300);
-    } else if (pressedInf) {
-        if (f->mugenState != 3400) {
-            TraceLog(LOG_INFO, "[INPUT] 1 -> State 3400 (Infinity)");
-            SetMugenState(f, 3400);
-        } else SetMugenState(f, 0);
-    } else if (pressedDash) {
-        TraceLog(LOG_INFO, "[INPUT] Q -> State 100 (Dash)");
-        SetMugenState(f, 100);
-    } else if (pressedJump && f->onGround) {
-        f->velY = JUMP_FORCE;
-        f->onGround = false;
-        SetMugenState(f, 40);
-    } else if (pressedRight) {
-        f->facingDir = 1;
-        if (f->mugenState != 20) SetMugenState(f, 20);
-    } else if (pressedLeft) {
-        f->facingDir = -1;
-        if (f->mugenState != 21) SetMugenState(f, 21);
-    } else if (f->onGround && f->mugenState != 0 && f->mugenState != 11 && f->mugenState != 3000 && f->mugenState != 3100 && f->mugenState != 3300 && f->mugenState != 3310 && f->mugenState != 3400 && !pressedLeft && !pressedRight) {
+    }
+
+    if (f->onGround && f->mugenState != 0 && f->mugenState != 11 && f->mugenState != 3000 && f->mugenState != 3100 && f->mugenState != 3300 && f->mugenState != 3310 && f->mugenState != 3400 && !pressedLeft && !pressedRight) {
         if (f->mugenState == 20 || f->mugenState == 21) {
             SetMugenState(f, 0);
         }
     }
-
     /* Charge mechanics for Red */
     bool holdingAb2 = isLocal ? BindingDown(gControls[profile].keys[ACT_ABILITY2]) : netInput->abilityR;
     if (f->mugenState == 3000) {
