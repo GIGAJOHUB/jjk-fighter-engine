@@ -3,16 +3,7 @@
 
 #include "characters.h"
 #include "raylib.h"
-#include "mugen_anim.h"
 #include <stdbool.h>
-#include <stdint.h>
-
-#define INPUT_BUFFER_SIZE 60
-
-typedef struct {
-    uint8_t dir;    // MUGEN 1-9
-    uint8_t buttons; // Bitfield: 1=A, 2=B, 4=C, 8=X, 16=Y, 32=Z, 64=S
-} InputFrame;
 
 typedef enum {
     ULT_NONE = 0,
@@ -53,14 +44,6 @@ typedef enum {
     VISUAL_EVENT_SUKUNA_CLEAVE,
     VISUAL_EVENT_SUKUNA_FUGA
 } FighterVisualEvent;
-
-#define MAX_MUGEN_SFX 64
-
-typedef struct {
-    Sound sfx[MAX_MUGEN_SFX];
-    bool  loaded[MAX_MUGEN_SFX];
-    int   count;
-} MugenSfx;
 
 #define MAX_PROJECTILES 32
 
@@ -112,7 +95,6 @@ typedef struct Fighter {
     int             hitStunFrames;
     float           knockbackVelX;
     bool            isBlocking;
-    int             blockHits;
     bool            isKnockedDown;
     int             knockdownFrames;
     int             wakeupInvincFrames;
@@ -196,25 +178,6 @@ typedef struct Fighter {
     float           dizzyMax;
     bool            isDizzy;
     int             dizzyFrames;
-
-    /* MUGEN Backend (Constrained Integration) */
-    int             mugenState;
-    int             mugenStateTime;
-    bool            mugenHitApplied;
-    MAPlayback      anim;
-    MugenSfx        mugenSfx;
-
-    /* Combo / Special Buffering */
-    int             lastSpecialState;
-    float           specialBufferTimer;
-
-    /* Enhanced Guard System */
-    int             guardHits;
-    bool            mugenCtrl;
-
-    /* Virtual Input Buffer */
-    InputFrame      inputBuffer[INPUT_BUFFER_SIZE];
-    int             inputBufferIdx;
 } Fighter;
 
 #endif // FIGHTER_H

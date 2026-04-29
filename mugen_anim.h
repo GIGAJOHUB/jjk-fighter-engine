@@ -25,7 +25,7 @@
 #define MA_MAX_ACTIONS       512   /* max different animations per character */
 #define MA_MAX_FRAMES        128   /* max frames per animation */
 #define MA_MAX_BOXES         8     /* max hit/hurtboxes per frame */
-#define MA_SPRITE_CACHE_SIZE 2048   /* LRU sprite cache size */
+#define MA_SPRITE_CACHE_SIZE 512   /* LRU sprite cache size */
 
 /* ──────────────────── CORE STRUCTS ──────────────────── */
 
